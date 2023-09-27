@@ -10,6 +10,7 @@
 #include "../../../include/secp256k1_ecdh.h"
 #include "../../../include/secp256k1_extrakeys.h"
 #include "../../../include/secp256k1_silentpayments.h"
+#include "../../hash.h"
 
 /* secp256k1_ecdh expects a hash function to be passed in or uses its default
  * hashing function. We don't want to hash the ECDH result, so we define a
@@ -196,6 +197,42 @@ int secp256k1_silentpayments_receive_create_shared_secret(const secp256k1_contex
 
     /* Compute shared_secret = A_tweaked * b_scan */
     if (!secp256k1_ecdh(ctx, shared_secret33, &A_tweaked, receiver_scan_seckey, ecdh_return_pubkey, NULL)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static void secp256k1_silentpayments_create_t_k(unsigned char *t_k, const unsigned char *shared_secret33, unsigned int k) {
+    secp256k1_sha256 sha;
+    unsigned char shared_secret_and_k[33+4];
+
+    /* Compute t_k = sha256(shared_secret || ser_32(k)) */
+    memcpy(shared_secret_and_k, shared_secret33, 33);
+    secp256k1_write_be32(shared_secret_and_k+33, k);
+    secp256k1_sha256_initialize(&sha);
+    secp256k1_sha256_write(&sha, shared_secret_and_k, sizeof(shared_secret_and_k));
+    secp256k1_sha256_finalize(&sha, t_k);
+}
+
+int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *output_xonly_pubkey, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k, const unsigned char *label_tweak32) {
+    secp256k1_pubkey P_output;
+    unsigned char t_k[32];
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(output_xonly_pubkey != NULL);
+    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(receiver_spend_pubkey != NULL);
+    ARG_CHECK(label_tweak32 == NULL); /* label tweaks are not supported yet */
+
+    /* Compute and return P_output = B_spend + t_k * G */
+    secp256k1_silentpayments_create_t_k(t_k, shared_secret33, k);
+    P_output = *receiver_spend_pubkey;
+    if (!secp256k1_ec_pubkey_tweak_add(ctx, &P_output, t_k)) {
+        return 0;
+    }
+    if (!secp256k1_xonly_pubkey_from_pubkey(ctx, output_xonly_pubkey, NULL, &P_output)) {
         return 0;
     }
 
