@@ -7,7 +7,34 @@
 #define SECP256K1_MODULE_SILENTPAYMENTS_MAIN_H
 
 #include "../../../include/secp256k1.h"
+#include "../../../include/secp256k1_ecdh.h"
+#include "../../../include/secp256k1_extrakeys.h"
 #include "../../../include/secp256k1_silentpayments.h"
+
+/* secp256k1_ecdh expects a hash function to be passed in or uses its default
+ * hashing function. We don't want to hash the ECDH result, so we define a
+ * custom function which simply returns the pubkey without hashing.
+ */
+static int ecdh_return_pubkey(unsigned char *output, const unsigned char *x32, const unsigned char *y32, void *data) {
+    secp256k1_pubkey pubkey;
+    unsigned char uncompressed_pubkey[65];
+    size_t outputlen = 33;
+    (void)data;
+
+    uncompressed_pubkey[0] = 0x04;
+    memcpy(uncompressed_pubkey + 1, x32, 32);
+    memcpy(uncompressed_pubkey + 33, y32, 32);
+
+    if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &pubkey, uncompressed_pubkey, 65)) {
+        return 0;
+    }
+
+    if (!secp256k1_ec_pubkey_serialize(secp256k1_context_static, output, &outputlen, &pubkey, SECP256K1_EC_COMPRESSED)) {
+        return 0;
+    }
+
+    return 1;
+}
 
 int secp256k1_silentpayments_create_private_tweak_data(const secp256k1_context *ctx, unsigned char *tweak_data32, const unsigned char *plain_seckeys, size_t n_plain_seckeys, const unsigned char *taproot_seckeys, size_t n_taproot_seckeys, const unsigned char *outpoints_hash32) {
     size_t i;
@@ -67,6 +94,20 @@ int secp256k1_silentpayments_create_private_tweak_data(const secp256k1_context *
     }
 
     memcpy(tweak_data32, a_tweaked, 32);
+    return 1;
+}
+
+int secp256k1_silentpayments_send_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *tweak_data32, const secp256k1_pubkey *receiver_scan_pubkey) {
+    /* Sanity check inputs */
+    ARG_CHECK(shared_secret33 != NULL);
+    memset(shared_secret33, 0, 33);
+    ARG_CHECK(receiver_scan_pubkey != NULL);
+
+    /* Compute shared_secret = a_tweaked * B_scan */
+    if (!secp256k1_ecdh(ctx, shared_secret33, receiver_scan_pubkey, tweak_data32, ecdh_return_pubkey, NULL)) {
+        return 0;
+    }
+
     return 1;
 }
 
