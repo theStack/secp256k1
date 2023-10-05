@@ -2,6 +2,7 @@
 #define SECP256K1_SILENTPAYMENTS_H
 
 #include "secp256k1.h"
+#include "secp256k1_extrakeys.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +25,41 @@ extern "C" {
  * manual cryptographical calculations.
  */
 
-/* TODO: add function API for sender side. */
+/** Create Silent Payment shared secret for the sender side.
+ *
+ *  Given a list of n private keys a_0...a_(n-1) (one for each input to spend),
+ *  an outpoints_hash, and a recipient's scan public key B_scan, compute the
+ *  corresponding shared secret using ECDH:
+ *
+ *  shared_secret = ((a_0 + a_1 + ... a_(n-1)) * outpoints_hash) * B_scan
+ *
+ *  Note that the private keys have to be passed in via two different parameter
+ *  pairs, depending on whether they were used for creating taproot outputs or not.
+ *  The resulting data is needed as input for creating silent payments outputs
+ *  belonging to the same receiver scan public key.
+ *
+ *  Returns: 1 if shared secret creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:       shared_secret33: pointer to the resulting 33-byte shared secret
+ *  In:          plain_seckeys: pointer to an array of 32-byte private keys of non-taproot inputs
+ *                              (can be NULL if no private keys of non-taproot inputs are used)
+ *             n_plain_seckeys: the number of sender's non-taproot input private keys
+ *              xonly_keypairs: pointer to an array of keypairs of taproot inputs
+ *                              (can be NULL if no private keys of taproot inputs are used)
+ *            n_xonly_keypairs: the number of sender's taproot input keypairs
+ *            outpoints_hash32: hash of the sorted serialized outpoints
+ *        receiver_scan_pubkey: pointer to the receiver's scan pubkey
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_send_create_shared_secret(
+    const secp256k1_context *ctx,
+    unsigned char *shared_secret33,
+    const unsigned char *plain_seckeys,
+    size_t n_plain_seckeys,
+    const secp256k1_keypair *xonly_keypairs,
+    size_t n_xonly_keypairs,
+    const unsigned char *outpoints_hash32,
+    const secp256k1_pubkey *receiver_scan_pubkey
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 
 /* TODO: add function API for receiver side. */
 
