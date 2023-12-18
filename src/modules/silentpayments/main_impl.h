@@ -93,6 +93,74 @@ int secp256k1_silentpayments_send_create_shared_secret(const secp256k1_context *
     return 1;
 }
 
+int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *ctx, unsigned char *tweak_data33, const secp256k1_pubkey *plain_pubkeys, size_t n_plain_pubkeys, const secp256k1_xonly_pubkey *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoints_hash32) {
+    size_t i;
+    secp256k1_pubkey A_tweaked;
+    size_t outputlen = 33;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(tweak_data33 != NULL);
+    memset(tweak_data33, 0, 33);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoints_hash32 != NULL);
+
+    /* Compute input public keys tweak: A_tweaked = (A_0 + A_1 + ... + A_n) * outpoints_hash */
+    for (i = 0; i < n_plain_pubkeys; i++) {
+        secp256k1_pubkey combined;
+        const secp256k1_pubkey *addends[2];
+        if (i == 0) {
+            A_tweaked = plain_pubkeys[0];
+            continue;
+        }
+        addends[0] = &A_tweaked;
+        addends[1] = &plain_pubkeys[i];
+        if (!secp256k1_ec_pubkey_combine(ctx, &combined, addends, 2)) {
+            return 0;
+        }
+        A_tweaked = combined;
+    }
+    /* X-only public keys have to be converted to regular public keys (assuming even parity) */
+    for (i = 0; i < n_xonly_pubkeys; i++) {
+        unsigned char pubkey_to_add_ser[33];
+        secp256k1_pubkey combined, pubkey_to_add;
+        const secp256k1_pubkey *addends[2];
+
+        pubkey_to_add_ser[0] = 0x02;
+        if (!secp256k1_xonly_pubkey_serialize(ctx, &pubkey_to_add_ser[1], &xonly_pubkeys[i])) {
+            return 0;
+        }
+        if (!secp256k1_ec_pubkey_parse(ctx, &pubkey_to_add, pubkey_to_add_ser, 33)) {
+            return 0;
+        }
+
+        if (i == 0 && n_plain_pubkeys == 0) {
+            A_tweaked = pubkey_to_add;
+            continue;
+        }
+        addends[0] = &A_tweaked;
+        addends[1] = &pubkey_to_add;
+        if (!secp256k1_ec_pubkey_combine(ctx, &combined, addends, 2)) {
+            return 0;
+        }
+        A_tweaked = combined;
+    }
+
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &A_tweaked, outpoints_hash32)) {
+        return 0;
+    }
+
+    /* Serialize tweak_data */
+    if (!secp256k1_ec_pubkey_serialize(ctx, tweak_data33, &outputlen, &A_tweaked, SECP256K1_EC_COMPRESSED)) {
+        return 0;
+    }
+
+    return 1;
+}
+
 /* TODO: implement functions for receiver side. */
 
 #endif

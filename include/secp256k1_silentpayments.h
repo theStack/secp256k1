@@ -61,7 +61,37 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_send_cre
     const secp256k1_pubkey *receiver_scan_pubkey
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 
-/* TODO: add function API for receiver side. */
+/** Create Silent Payment tweak data from input public keys.
+ *
+ * Given a list of n public keys A_0...A_(n-1) (one for each input to spend)
+ * and an outpoints_hash, compute the corresponding input public keys tweak data:
+ *
+ * A_tweaked = (A_0 + A_1 + ... A_(n-1)) * outpoints_hash
+ *
+ * Note that the public keys have to be passed in via two different parameter pairs,
+ * depending on whether they were used for creating taproot outputs or not.
+ * The resulting data is needed to create a shared secret for the receiver's side.
+ *
+ *  Returns: 1 if tweak data creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:          tweak_data33: pointer to the resulting 33-byte tweak data
+ *  In:          plain_pubkeys: pointer to an array of non-taproot public keys
+ *                              (can be NULL if no non-taproot inputs are used)
+ *             n_plain_pubkeys: the number of non-taproot input public keys
+ *               xonly_pubkeys: pointer to an array of taproot x-only public keys
+ *                              (can be NULL if no taproot input public keys are used)
+ *             n_xonly_pubkeys: the number of taproot input public keys
+ *            outpoints_hash32: hash of the sorted serialized outpoints
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_public_tweak_data(
+    const secp256k1_context *ctx,
+    unsigned char *tweak_data33,
+    const secp256k1_pubkey *plain_pubkeys,
+    size_t n_plain_pubkeys,
+    const secp256k1_xonly_pubkey *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const unsigned char *outpoints_hash32
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7);
 
 #ifdef __cplusplus
 }
