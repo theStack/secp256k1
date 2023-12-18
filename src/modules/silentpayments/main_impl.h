@@ -141,6 +141,60 @@ int secp256k1_silentpayments_send_create_shared_secret(const secp256k1_context *
     return 1;
 }
 
+int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *ctx, unsigned char *tweak_data33, const secp256k1_pubkey *plain_pubkeys, size_t n_plain_pubkeys, const secp256k1_xonly_pubkey *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoint_lowest36) {
+    size_t i;
+    secp256k1_ge A_sum_ge;
+    secp256k1_gej A_sum_gej;
+    secp256k1_scalar input_hash_scalar;
+    size_t ser_size;
+    int ser_ret;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(tweak_data33 != NULL);
+    memset(tweak_data33, 0, 33);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoint_lowest36 != NULL);
+
+    /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
+    secp256k1_gej_set_infinity(&A_sum_gej);
+    for (i = 0; i < n_plain_pubkeys; i++) {
+        secp256k1_ge addend;
+        secp256k1_pubkey_load(ctx, &addend, &plain_pubkeys[i]);
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+
+    /* X-only public keys have to be converted to regular public keys (assuming even parity) */
+    for (i = 0; i < n_xonly_pubkeys; i++) {
+        secp256k1_ge addend;
+        secp256k1_xonly_pubkey_load(ctx, &addend, &xonly_pubkeys[i]);
+        if (secp256k1_fe_is_odd(&addend.y)) {
+            secp256k1_fe_negate(&addend.y, &addend.y, 1);
+        }
+        VERIFY_CHECK(!secp256k1_fe_is_odd(&addend.y));
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+    secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
+
+    /* Compute input_hash = hash(outpoint_L || A_sum) */
+    secp256k1_silentpayments_calculate_input_hash(&input_hash_scalar, outpoint_lowest36, &A_sum_ge);
+
+    /* Compute A_tweaked = A_sum * input_hash */
+    if (!secp256k1_eckey_pubkey_tweak_mul(&A_sum_ge, &input_hash_scalar)) {
+        return 0;
+    }
+
+    /* Serialize tweak_data */
+    ser_ret = secp256k1_eckey_pubkey_serialize(&A_sum_ge, tweak_data33, &ser_size, 1);
+    VERIFY_CHECK(ser_ret && ser_size == 33);
+    (void)ser_ret;
+
+    return 1;
+}
+
 /* TODO: implement functions for receiver side. */
 
 #endif
