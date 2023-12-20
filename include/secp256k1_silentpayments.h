@@ -144,6 +144,33 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_o
     const unsigned char *label_tweak32
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
+/** Create Silent Payment output private key (for spending receiver's funds).
+ *
+ *  Given a shared_secret, a recipient's spend private key b_spend, and an
+ *  output counter k, calculate the corresponding output private key d:
+ *
+ *  d = (b_spend + sha256(shared_secret || ser_32(k))) mod n
+ *
+ *  Returns: 1 if private key creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:         output_seckey: pointer to the resulting spending private key
+ *  In:        shared_secret33: shared secret, derived from either sender's
+ *                              or receiver's perspective with routines from above
+ *       receiver_spend_seckey: pointer to the receiver's spend private key
+ *                           k: output counter (usually set to 0, should be increased for
+ *                              every additional output to the same recipient)
+ *               label_tweak32: an optional 32-byte label tweak
+ *                              (not supported yet, must be set to NULL right now)
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_output_seckey(
+    const secp256k1_context *ctx,
+    unsigned char *output_seckey,
+    const unsigned char *shared_secret33,
+    const unsigned char *receiver_spend_seckey,
+    unsigned int k,
+    const unsigned char *label_tweak32
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
 #ifdef __cplusplus
 }
 #endif
