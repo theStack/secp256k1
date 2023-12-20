@@ -239,4 +239,25 @@ int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, 
     return 1;
 }
 
+int secp256k1_silentpayments_create_output_seckey(const secp256k1_context *ctx, unsigned char *output_seckey, const unsigned char *shared_secret33, const unsigned char *receiver_spend_seckey, unsigned int k, const unsigned char *label_tweak32) {
+    unsigned char t_k[32];
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(output_seckey != NULL);
+    memset(output_seckey, 0, 32);
+    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(receiver_spend_seckey != NULL);
+    ARG_CHECK(label_tweak32 == NULL); /* label tweaks are not supported yet */
+
+    /* Compute and return d = (b_spend + t_k) mod n */
+    memcpy(output_seckey, receiver_spend_seckey, 32);
+    secp256k1_silentpayments_create_t_k(t_k, shared_secret33, k);
+    if (!secp256k1_ec_seckey_tweak_add(ctx, output_seckey, t_k)) {
+        return 0;
+    }
+
+    return 1;
+}
+
 #endif
