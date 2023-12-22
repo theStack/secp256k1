@@ -28,7 +28,38 @@ extern "C" {
  * operations.
  */
 
-/* TODO: add function API for sender side. */
+/** Create Silent Payment tweak data from input private keys.
+ *
+ * Given a list of n private keys a_0...a_(n-1) (one for each input to spend)
+ * and an outpoints_hash, compute the corresponding input private keys tweak data:
+ *
+ * a_tweaked = (a_0 + a_1 + ... a_(n-1)) * outpoints_hash
+ *
+ * If necessary, the private keys are negated to enforce the right y-parity.
+ * For that reason, the private keys have to be passed in via two different parameter
+ * pairs, depending on whether they were used for creating taproot outputs or not.
+ * The resulting data is needed to create a shared secret for the sender side.
+ *
+ *  Returns: 1 if shared secret creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:          tweak_data32: pointer to the resulting 32-byte tweak data
+ *  In:          plain_seckeys: pointer to an array of 32-byte private keys of non-taproot inputs
+ *                              (can be NULL if no private keys of non-taproot inputs are used)
+ *             n_plain_seckeys: the number of sender's non-taproot input private keys
+ *             taproot_seckeys: pointer to an array of 32-byte private keys of taproot inputs
+ *                              (can be NULL if no private keys of taproot inputs are used)
+ *           n_taproot_seckeys: the number of sender's taproot input private keys
+ *            outpoints_hash32: hash of the sorted serialized outpoints
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_private_tweak_data(
+    const secp256k1_context *ctx,
+    unsigned char *tweak_data32,
+    const unsigned char *plain_seckeys,
+    size_t n_plain_seckeys,
+    const unsigned char *taproot_seckeys,
+    size_t n_taproot_seckeys,
+    const unsigned char *outpoints_hash32
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7);
 
 /* TODO: add function API for receiver side. */
 
