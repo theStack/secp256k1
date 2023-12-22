@@ -28,7 +28,41 @@ extern "C" {
  * operations.
  */
 
-/* TODO: add function API for sender side. */
+/** Create Silent Payment tweak data from input private keys.
+ *
+ * Given a list of n private keys a_1...a_n (one for each input to spend)
+ * and a serialized outpoint_lowest, compute the corresponding input
+ * private keys tweak data:
+ *
+ * a_tweaked = (a_1 + a_2 + ... + a_n) * hash(outpoint_lowest || A)
+ *
+ * (where A = A_1 + A_2 + ... + A_n)
+ *
+ * If necessary, the private keys are negated to enforce the right y-parity.
+ * For that reason, the private keys have to be passed in via two different parameter
+ * pairs, depending on whether they were used for creating taproot outputs or not.
+ * The resulting data is needed to create a shared secret for the sender side.
+ *
+ *  Returns: 1 if shared secret creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:          tweak_data32: pointer to the resulting 32-byte tweak data
+ *  In:          plain_seckeys: pointer to an array of 32-byte private keys of non-taproot inputs
+ *                              (can be NULL if no private keys of non-taproot inputs are used)
+ *             n_plain_seckeys: the number of sender's non-taproot input private keys
+ *             taproot_seckeys: pointer to an array of 32-byte private keys of taproot inputs
+ *                              (can be NULL if no private keys of taproot inputs are used)
+ *           n_taproot_seckeys: the number of sender's taproot input private keys
+ *           outpoint_lowest36: serialized lowest outpoint
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_private_tweak_data(
+    const secp256k1_context *ctx,
+    unsigned char *tweak_data32,
+    const unsigned char *plain_seckeys,
+    size_t n_plain_seckeys,
+    const unsigned char *taproot_seckeys,
+    size_t n_taproot_seckeys,
+    const unsigned char *outpoint_lowest36
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7);
 
 /* TODO: add function API for receiver side. */
 
