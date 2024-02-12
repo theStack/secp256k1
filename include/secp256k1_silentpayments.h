@@ -230,6 +230,33 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_o
     unsigned int k
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(5) SECP256K1_ARG_NONNULL(6);
 
+/** Create Silent Payment scan labels (for receiver).
+ *
+ *  Given a calculated output public key P_output and a scanned tx's actual
+ *  output x-only public key tx_output, calculate the corresponding scan
+ *  label candidates:
+ *
+ *  label1 =  tx_output - P_output
+ *  label2 = -tx_output - P_output
+ *
+ *  The resulting data is needed for the receiver to efficiently scan for labels
+ *  in silent payments eligible outputs.
+ *
+ *  Returns: 1 if scan label creation was successful. 0 if an error occured.
+ *  Args:            ctx: pointer to a context object
+ *  Out:          label1: pointer to the resulting first scan label candidate
+ *                label2: pointer to the resulting second scan label candidate (negated)
+ *  In:         P_output: pointer to the calculated output public key
+ *             tx_output: pointer to the scanned tx's output x-only public key
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_scan_labels(
+    const secp256k1_context *ctx,
+    secp256k1_pubkey *label1,
+    secp256k1_pubkey *label2,
+    const secp256k1_pubkey *P_output,
+    const secp256k1_xonly_pubkey *tx_output
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(5);
+
 #ifdef __cplusplus
 }
 #endif
