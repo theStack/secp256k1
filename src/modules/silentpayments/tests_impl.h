@@ -195,17 +195,13 @@ void run_silentpayments_test_vectors(void) {
 
         /* Calculate public tweak data (receiver perspective) */
         {
-            secp256k1_pubkey plain_pubkeys_objs[MAX_INPUTS_PER_TEST_CASE];
-            secp256k1_xonly_pubkey xonly_pubkeys_objs[MAX_INPUTS_PER_TEST_CASE];
-            secp256k1_pubkey const *plain_pubkeys[MAX_INPUTS_PER_TEST_CASE];
-            secp256k1_xonly_pubkey const *xonly_pubkeys[MAX_INPUTS_PER_TEST_CASE];
+            unsigned char const *plain_pubkeys[MAX_INPUTS_PER_TEST_CASE];
+            unsigned char const *xonly_pubkeys[MAX_INPUTS_PER_TEST_CASE];
             for (j = 0; j < test->num_plain_inputs; j++) {
-                CHECK(secp256k1_ec_pubkey_parse(CTX, &plain_pubkeys_objs[j], test->plain_pubkeys[j], 33));
-                plain_pubkeys[j] = &plain_pubkeys_objs[j];
+                plain_pubkeys[j] = test->plain_pubkeys[j];
             }
             for (j = 0; j < test->num_taproot_inputs; j++) {
-                CHECK(secp256k1_xonly_pubkey_parse(CTX, &xonly_pubkeys_objs[j], test->xonly_pubkeys[j]));
-                xonly_pubkeys[j] = &xonly_pubkeys_objs[j];
+                xonly_pubkeys[j] = test->xonly_pubkeys[j];
             }
             CHECK(secp256k1_silentpayments_create_public_tweak_data(CTX, &A_sum, input_hash_receiver,
                 test->num_plain_inputs > 0 ? plain_pubkeys : NULL, test->num_plain_inputs,

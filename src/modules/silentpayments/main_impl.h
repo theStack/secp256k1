@@ -101,7 +101,7 @@ int secp256k1_silentpayments_create_private_tweak_data(const secp256k1_context *
     return 1;
 }
 
-int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *ctx, secp256k1_pubkey *A_sum, unsigned char *input_hash, const secp256k1_pubkey * const *plain_pubkeys, size_t n_plain_pubkeys, const secp256k1_xonly_pubkey * const *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoint_smallest36) {
+int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *ctx, secp256k1_pubkey *A_sum, unsigned char *input_hash, const unsigned char * const *plain_pubkeys, size_t n_plain_pubkeys, const unsigned char * const *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoint_smallest36) {
     size_t i;
     secp256k1_ge A_sum_ge, addend;
     secp256k1_gej A_sum_gej;
@@ -120,11 +120,18 @@ int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *c
     /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
     secp256k1_gej_set_infinity(&A_sum_gej);
     for (i = 0; i < n_plain_pubkeys; i++) {
-        secp256k1_pubkey_load(ctx, &addend, plain_pubkeys[i]);
+        if (!secp256k1_eckey_pubkey_parse(&addend, plain_pubkeys[i], 33)) {
+            return 0;
+        }
         secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
     }
     for (i = 0; i < n_xonly_pubkeys; i++) {
-        secp256k1_xonly_pubkey_load(ctx, &addend, xonly_pubkeys[i]);
+        unsigned char full_pubkey[33];
+        full_pubkey[0] = 0x02;
+        memcpy(&full_pubkey[1], xonly_pubkeys[i], 32);
+        if (!secp256k1_eckey_pubkey_parse(&addend, full_pubkey, 33)) {
+            return 0;
+        }
         secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
     }
     if (secp256k1_gej_is_infinity(&A_sum_gej)) {

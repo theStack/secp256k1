@@ -86,7 +86,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_p
  *  Args:                  ctx: pointer to a context object
  *  Out:                 A_sum: pointer to the resulting public keys sum
  *                  input_hash: pointer to the resulting 32-byte input hash
- *  In:          plain_pubkeys: pointer to an array of pointers to non-taproot
+ *  In:          plain_pubkeys: pointer to an array of pointers to non-taproot compressed
  *                              public keys (can be NULL if no non-taproot inputs are used)
  *             n_plain_pubkeys: the number of non-taproot input public keys
  *               xonly_pubkeys: pointer to an array of pointers to taproot x-only
@@ -98,9 +98,9 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_p
     const secp256k1_context *ctx,
     secp256k1_pubkey *A_sum,
     unsigned char *input_hash,
-    const secp256k1_pubkey * const *plain_pubkeys,
+    const unsigned char * const *plain_pubkeys,
     size_t n_plain_pubkeys,
-    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    const unsigned char * const *xonly_pubkeys,
     size_t n_xonly_pubkeys,
     const unsigned char *outpoint_smallest36
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(8);
