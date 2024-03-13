@@ -147,6 +147,58 @@ int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *c
     return 1;
 }
 
+int secp256k1_silentpayments_create_public_tweak_data_ONLYPUBLIC(const secp256k1_context *ctx, secp256k1_pubkey *A_sum, unsigned char *input_hash, const unsigned char * const *plain_pubkeys, size_t n_plain_pubkeys, const unsigned char * const *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoint_smallest36) {
+    size_t i;
+    unsigned char to_hash[36 + 33];
+    size_t outputlen = 33;
+    size_t n_total_pubkeys = n_plain_pubkeys + n_xonly_pubkeys;
+    static secp256k1_pubkey addends[25000];
+    static const secp256k1_pubkey *addends_ptrs[25000];
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoint_smallest36 != NULL);
+
+    /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
+    for (i = 0; i < n_total_pubkeys; i++) {
+        if (i < n_plain_pubkeys) {
+            if (!secp256k1_ec_pubkey_parse(ctx, &addends[i], plain_pubkeys[i], 33)) {
+                return 0;
+            }
+        } else {
+            /* X-only public keys have to be converted to regular public keys (assuming even parity) */
+            unsigned char pubkey_to_add_ser[33];
+
+            pubkey_to_add_ser[0] = 0x02;
+            memcpy(&pubkey_to_add_ser[1], xonly_pubkeys[i - n_plain_pubkeys], 32);
+            if (!secp256k1_ec_pubkey_parse(ctx, &addends[i], pubkey_to_add_ser, 33)) {
+                return 0;
+            }
+        }
+
+        addends_ptrs[i] = &addends[i];
+    }
+
+    if (!secp256k1_ec_pubkey_combine(ctx, A_sum, addends_ptrs, n_total_pubkeys)) {
+        return 0;
+    }
+
+    /* Compute input_hash = hash(outpoint_L || A_sum) */
+    memcpy(to_hash, outpoint_smallest36, 36);
+    if (!secp256k1_ec_pubkey_serialize(ctx, to_hash+36, &outputlen, A_sum, SECP256K1_EC_COMPRESSED)) {
+        return 0;
+    }
+    if (!secp256k1_tagged_sha256(ctx, input_hash, (unsigned char*)"BIP0352/Inputs", 14, to_hash, sizeof(to_hash))) {
+        return 0;
+    }
+
+    return 1;
+}
+
 int secp256k1_silentpayments_create_tweaked_pubkey(const secp256k1_context *ctx, secp256k1_pubkey *A_tweaked, const secp256k1_pubkey *A_sum, const unsigned char *input_hash) {
     /* Sanity check inputs */
     VERIFY_CHECK(ctx != NULL);

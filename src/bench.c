@@ -6,8 +6,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "../include/secp256k1.h"
+#include "../include/secp256k1_silentpayments.h"
+#include "hash_impl.h"
+#include "testrand_impl.h"
 #include "util.h"
 #include "bench.h"
 
@@ -165,6 +169,121 @@ static void bench_keygen_run(void *arg, int iters) {
 # include "modules/ellswift/bench_impl.h"
 #endif
 
+void pubkey_raw_from_seckey(secp256k1_context *ctx, unsigned char *pubkey_raw, const unsigned char *seckey) {
+    secp256k1_pubkey pubkey;
+    size_t outputlen = 33;
+    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, seckey));
+    CHECK(secp256k1_ec_pubkey_serialize(ctx, pubkey_raw, &outputlen, &pubkey, SECP256K1_EC_COMPRESSED));
+}
+
+void xonly_pubkey_raw_from_seckey(secp256k1_context *ctx, unsigned char *xonly_pubkey_raw, const unsigned char *seckey) {
+    secp256k1_pubkey pubkey;
+    secp256k1_xonly_pubkey xonly_pubkey;
+    CHECK(secp256k1_ec_pubkey_create(ctx, &pubkey, seckey));
+    CHECK(secp256k1_xonly_pubkey_from_pubkey(ctx, &xonly_pubkey, NULL, &pubkey));
+    CHECK(secp256k1_xonly_pubkey_serialize(ctx, xonly_pubkey_raw, &xonly_pubkey));
+}
+
+#define BIP352_BENCH_MAX_INOUT 1000
+
+#ifdef VERIFY
+#error ya shall not build benchmarks with VERIFY enabled!
+#endif
+
+
+void run_silentpayments_bench(void) {
+    secp256k1_context *ctx = NULL;
+    unsigned char plain_pubkeys[BIP352_BENCH_MAX_INOUT][33];
+    unsigned char xonly_pubkeys[BIP352_BENCH_MAX_INOUT][32];
+    unsigned char outputs[BIP352_BENCH_MAX_INOUT][32];
+    unsigned char const *plain_pubkeys_ptrs[BIP352_BENCH_MAX_INOUT];
+    unsigned char const *xonly_pubkeys_ptrs[BIP352_BENCH_MAX_INOUT];
+    unsigned char outpoint_smallest[36] = {0};
+    unsigned char b_scan[32], b_spend[32];
+    secp256k1_pubkey B_spend;
+    int64_t begin, stage1, stage2, stage3, total;
+    int64_t temp;
+    int i;
+
+    /* prepare input data material */
+    ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    secp256k1_testrand_init("deadcafebeef6666");
+    for (i = 0; i < BIP352_BENCH_MAX_INOUT; i++) {
+        unsigned char seckey[32];
+
+        secp256k1_testrand256(seckey);
+        pubkey_raw_from_seckey(ctx, &plain_pubkeys[i][0], seckey);
+        plain_pubkeys_ptrs[i] = plain_pubkeys[i];
+
+        secp256k1_testrand256(seckey);
+        xonly_pubkey_raw_from_seckey(ctx, &xonly_pubkeys[i][0], seckey);
+        xonly_pubkeys_ptrs[i] = xonly_pubkeys[i];
+
+        secp256k1_testrand256(seckey);
+        xonly_pubkey_raw_from_seckey(ctx, outputs[i], seckey);
+    }
+    secp256k1_testrand256(b_scan);
+    secp256k1_testrand256(b_spend);
+    CHECK(secp256k1_ec_pubkey_create(ctx, &B_spend, b_spend));
+
+    /* benchmark receiver (public tweak data + shared secret creation, scanning) */
+    begin = gettime_i64();
+    {
+        secp256k1_pubkey A_sum;
+        unsigned char input_hash[32];
+        unsigned char input_hash2[32];
+        unsigned char shared_secret[33];
+        secp256k1_xonly_pubkey P_output;
+        unsigned char output_ser[32];
+
+        size_t num_plain = 10;
+        size_t num_xonly = 10;
+
+        temp = gettime_i64();
+        CHECK(secp256k1_silentpayments_create_public_tweak_data(ctx, &A_sum, input_hash,
+            num_plain ? plain_pubkeys_ptrs : NULL, num_plain,
+            num_xonly ? xonly_pubkeys_ptrs : NULL, num_xonly, outpoint_smallest));
+        printf("-> public tweak data creation took %lld usec (MODULE)\n", gettime_i64() - temp);
+
+        temp = gettime_i64();
+        CHECK(secp256k1_silentpayments_create_public_tweak_data_ONLYPUBLIC(ctx, &A_sum, input_hash2,
+            num_plain ? plain_pubkeys_ptrs : NULL, num_plain,
+            num_xonly ? xonly_pubkeys_ptrs : NULL, num_xonly, outpoint_smallest));
+        printf("-> public tweak data creation took %lld usec (ONLYPUBLIC)\n", gettime_i64() - temp);
+
+        printf("input hashes equal == %d\n", memcmp(input_hash, input_hash2, 32) == 0);
+
+        stage1 = gettime_i64();
+
+        CHECK(secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &A_sum, b_scan, input_hash));
+        stage2 = gettime_i64();
+
+        CHECK(secp256k1_silentpayments_sender_create_output_pubkey(ctx, &P_output, shared_secret, &B_spend, 0));
+        stage3 = gettime_i64();
+
+        /*
+        for (i = 0; i < 10; i++) {
+            int direct_match;
+            unsigned char t_k[32];
+            secp256k1_silentpayments_label_data label_data;
+            CHECK(secp256k1_silentpayments_receiver_scan_output(ctx, &direct_match, t_k, &label_data,
+                shared_secret, &B_spend, 0, outputs[i]));
+        }
+        printf("-> scanning outputs took %lld usec\n", stage3 - stage2);
+        */
+        printf("-> public tweak data creation took %lld usec\n", stage1 - begin);
+        printf("-> shared secret creation took %lld usec\n", stage2 - stage1);
+        printf("-> output creation took %lld usec\n", stage3 - stage2);
+        CHECK(secp256k1_xonly_pubkey_serialize(ctx, output_ser, &P_output));
+        printf("output: %02x %02x %02x %02x %02x ...\n", output_ser[0], output_ser[1],
+            output_ser[2], output_ser[3], output_ser[4]);
+
+
+    }
+    total = gettime_i64() - begin;
+    printf("silent payments scanning took %lld usec in total.\n", total);
+}
+
 int main(int argc, char** argv) {
     int i;
     secp256k1_pubkey pubkey;
@@ -195,6 +314,10 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+
+    /* run secp256k1-silentpayments benchmarks */
+    run_silentpayments_bench();
+    return 0;
 
 /* Check if the user tries to benchmark optional module without building it */
 #ifndef ENABLE_MODULE_ECDH

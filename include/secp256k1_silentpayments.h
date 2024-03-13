@@ -105,6 +105,17 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_p
     const unsigned char *outpoint_smallest36
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(8);
 
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_public_tweak_data_ONLYPUBLIC(
+    const secp256k1_context *ctx,
+    secp256k1_pubkey *A_sum,
+    unsigned char *input_hash,
+    const unsigned char * const *plain_pubkeys,
+    size_t n_plain_pubkeys,
+    const unsigned char * const *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const unsigned char *outpoint_smallest36
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(8);
+
 /** Create Silent Payment tweaked public key from public tweak data.
  *
  * Given public tweak data (public keys sum and input hash), calculate the
