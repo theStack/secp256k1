@@ -562,20 +562,24 @@ static void secp256k1_musig_compute_noncehash(unsigned char *noncehash, secp256k
     secp256k1_sha256_finalize(&sha, noncehash);
 }
 
+static void compute_nonce_from_points_and_coeff(secp256k1_gej *noncej, const secp256k1_ge *noncepoints, const secp256k1_scalar *b) {
+    secp256k1_gej noncepoint2j;
+
+    /* nonce = noncepoints[0] + b*noncepoints[1] */
+    secp256k1_gej_set_ge(&noncepoint2j, &noncepoints[1]);
+    secp256k1_ecmult(noncej, &noncepoint2j, b, NULL);
+    secp256k1_gej_add_ge_var(noncej, noncej, &noncepoints[0], NULL);
+}
+
 static int secp256k1_musig_nonce_process_internal(int *fin_nonce_parity, unsigned char *fin_nonce, secp256k1_scalar *b, secp256k1_ge *aggnonce, const unsigned char *agg_pk32, const unsigned char *msg) {
     unsigned char noncehash[32];
     secp256k1_ge fin_nonce_pt;
     secp256k1_gej fin_nonce_ptj;
-    secp256k1_gej aggnoncej[2];
 
     secp256k1_musig_compute_noncehash(noncehash, aggnonce, agg_pk32, msg);
-    secp256k1_gej_set_ge(&aggnoncej[0], &aggnonce[0]);
-    secp256k1_gej_set_ge(&aggnoncej[1], &aggnonce[1]);
     /* fin_nonce = aggnonce[0] + b*aggnonce[1] */
     secp256k1_scalar_set_b32(b, noncehash, NULL);
-    secp256k1_gej_set_infinity(&fin_nonce_ptj);
-    secp256k1_ecmult(&fin_nonce_ptj, &aggnoncej[1], b, NULL);
-    secp256k1_gej_add_ge_var(&fin_nonce_ptj, &fin_nonce_ptj, &aggnonce[0], NULL);
+    compute_nonce_from_points_and_coeff(&fin_nonce_ptj, aggnonce, b);
     secp256k1_ge_set_gej(&fin_nonce_pt, &fin_nonce_ptj);
     if (secp256k1_ge_is_infinity(&fin_nonce_pt)) {
         fin_nonce_pt = secp256k1_ge_const_g;
@@ -734,9 +738,7 @@ int secp256k1_musig_partial_sig_verify(const secp256k1_context* ctx, const secp2
     if (!secp256k1_musig_pubnonce_load(ctx, nonce_pt, pubnonce)) {
         return 0;
     }
-    secp256k1_gej_set_ge(&rj, &nonce_pt[1]);
-    secp256k1_ecmult(&rj, &rj, &session_i.noncecoef, NULL);
-    secp256k1_gej_add_ge_var(&rj, &rj, &nonce_pt[0], NULL);
+    compute_nonce_from_points_and_coeff(&rj, nonce_pt, &session_i.noncecoef);
 
     if (!secp256k1_pubkey_load(ctx, &pkp, pubkey)) {
         return 0;
