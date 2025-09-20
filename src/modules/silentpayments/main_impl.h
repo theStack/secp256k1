@@ -18,6 +18,17 @@
 #include "../../hash.h"
 #include "../../hsort.h"
 
+#include <time.h> /* avoid "implicit declaration of function 'time' warnings */
+#include "../../testrand_impl.h" /* avoid "used but never defined" warnings */
+#include "../../testutil.h"
+
+static int g_test_input_hash_zero = 0;
+static int g_test_input_hash_overflow = 0;
+static int g_test_output_tweak_zero = 0;
+static int g_test_output_tweak_overflow = 0;
+static int g_test_label_tweak_zero = 0;
+static int g_test_label_tweak_overflow = 0;
+
 /** Sort an array of silent payment recipients. This is used to group recipients by scan pubkey to
  *  ensure the correct values of k are used when creating multiple outputs for a recipient.
  */
@@ -70,6 +81,11 @@ static int secp256k1_silentpayments_calculate_input_hash_scalar(secp256k1_scalar
     VERIFY_CHECK(ret && len == sizeof(pubkey_sum_ser));
     secp256k1_sha256_write(&hash, pubkey_sum_ser, sizeof(pubkey_sum_ser));
     secp256k1_sha256_finalize(&hash, input_hash);
+    if (g_test_input_hash_zero) {
+        memset(input_hash, 0, 32);
+    } else if (g_test_input_hash_overflow) {
+        memcpy(input_hash, secp256k1_group_order_bytes, 32);
+    }
     /* Convert input_hash to a scalar to ensure the value is less than the curve order.
      *
      * This can only fail if the output of the hash function is zero or greater than the curve order, which
@@ -134,6 +150,11 @@ static int secp256k1_silentpayments_create_output_tweak(secp256k1_scalar *output
     secp256k1_write_be32(k_serialized, k);
     secp256k1_sha256_write(&hash, k_serialized, sizeof(k_serialized));
     secp256k1_sha256_finalize(&hash, hash_ser);
+    if (g_test_output_tweak_zero) {
+        memset(hash_ser, 0, 32);
+    } else if (g_test_output_tweak_overflow) {
+        memcpy(hash_ser, secp256k1_group_order_bytes, 32);
+    }
     /* Convert output_tweak to a scalar to ensure the value is less than the curve order.
      *
      * This can only fail if the output of the hash function is zero greater than the curve order, which
@@ -344,6 +365,11 @@ int secp256k1_silentpayments_recipient_create_label(const secp256k1_context *ctx
     secp256k1_write_be32(m_serialized, m);
     secp256k1_sha256_write(&hash, m_serialized, sizeof(m_serialized));
     secp256k1_sha256_finalize(&hash, label_tweak32);
+    if (g_test_label_tweak_zero) {
+        memset(label_tweak32, 0, 32);
+    } else if (g_test_label_tweak_overflow) {
+        memcpy(label_tweak32, secp256k1_group_order_bytes, 32);
+    }
 
     secp256k1_memclear_explicit(m_serialized, sizeof(m_serialized));
     secp256k1_sha256_clear(&hash);
