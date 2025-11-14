@@ -55,6 +55,16 @@ static int secp256k1_eckey_pubkey_serialize(secp256k1_ge *elem, unsigned char *p
     return 1;
 }
 
+static void secp256k1_eckey_pubkey_serialize33(secp256k1_ge *elem, unsigned char *pub33) {
+    size_t ser_size = 33;
+    int ser_ret = secp256k1_eckey_pubkey_serialize(elem, pub33, &ser_size, 1);
+#ifdef VERIFY
+    VERIFY_CHECK(ser_ret && ser_size == 33);
+#else
+    (void)ser_ret;
+#endif
+}
+
 static int secp256k1_eckey_privkey_tweak_add(secp256k1_scalar *key, const secp256k1_scalar *tweak) {
     secp256k1_scalar_add(key, key, tweak);
     return !secp256k1_scalar_is_zero(key);
