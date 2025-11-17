@@ -280,7 +280,13 @@ int secp256k1_ec_pubkey_serialize(const secp256k1_context* ctx, unsigned char *o
     ARG_CHECK(pubkey != NULL);
     ARG_CHECK((flags & SECP256K1_FLAGS_TYPE_MASK) == SECP256K1_FLAGS_TYPE_COMPRESSION);
     if (secp256k1_pubkey_load(ctx, &Q, pubkey)) {
-        ret = secp256k1_eckey_pubkey_serialize(&Q, output, &len, !!(flags & SECP256K1_FLAGS_BIT_COMPRESSION));
+        if (flags & SECP256K1_FLAGS_BIT_COMPRESSION) {
+            ret = secp256k1_eckey_pubkey_serialize33(&Q, output);
+            len = 33;
+        } else {
+            ret = secp256k1_eckey_pubkey_serialize65(&Q, output);
+            len = 65;
+        }
         if (ret) {
             *outputlen = len;
         }
