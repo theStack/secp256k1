@@ -19,16 +19,8 @@ typedef struct {
     secp256k1_silentpayments_found_output found_outputs[2];
     unsigned char scalar[32];
     unsigned char smallest_outpoint[36];
+    secp256k1_silentpayments_label_entry label_entries[1];
 } bench_silentpayments_data;
-
-/* we need a non-null pointer for the cache */
-static int noop;
-void* label_cache = &noop;
-const unsigned char* label_lookup(const unsigned char* key, const void* cache_ptr) {
-    (void)key;
-    (void)cache_ptr;
-    return NULL;
-}
 
 static void bench_silentpayments_scan_setup(void* arg) {
     int i;
@@ -83,6 +75,11 @@ static void bench_silentpayments_scan_setup(void* arg) {
     CHECK(secp256k1_ec_pubkey_parse(data->ctx, &data->spend_pubkeys[0], spend_pubkey, pubkeylen));
     memcpy(data->scan_key, scan_key, 32);
     memcpy(data->smallest_outpoint, smallest_outpoint, 36);
+    /* Create a dummy label for the labels benchmark */
+    CHECK(secp256k1_silentpayments_recipient_create_label(data->ctx,
+        &data->label_entries[0].label,
+        data->label_entries[0].label_tweak32,
+        scan_key, 1));
 }
 
 static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labels) {
@@ -93,8 +90,16 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
     const secp256k1_xonly_pubkey *tx_input_ptrs[2];
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
-    const secp256k1_silentpayments_label_lookup label_lookup_fn = use_labels ? label_lookup : NULL;
-    const void *label_context = use_labels ? label_cache : NULL;
+    secp256k1_silentpayments_label_set label_set;
+
+    /* Set up label set based on use_labels flag */
+    if (use_labels) {
+        label_set.entries = data->label_entries;
+        label_set.n_entries = 1;
+    } else {
+        label_set.entries = NULL;
+        label_set.n_entries = 0;
+    }
 
     for (i = 0; i < 2; i++) {
         found_output_ptrs[i] = &data->found_outputs[i];
@@ -114,7 +119,7 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
             data->scan_key,
             &prevouts_summary,
             &data->spend_pubkeys[0],
-            label_lookup_fn, label_context)
+            use_labels ? &label_set : NULL)
         );
         CHECK(n_found == 0);
     }

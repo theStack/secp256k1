@@ -238,22 +238,28 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     size_t n_plain_pubkeys
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
-/** Callback function for label lookups
+/** Label entry and label set used during scanning.
  *
- *  This function is implemented by the recipient to check if a value exists in
- *  the recipients label cache during scanning.
+ *  Wallets that use labeled Silent Payments addresses are expected to keep
+ *  track of all labels they have created. For each label, the wallet should
+ *  store both the corresponding label public key and the 32-byte label tweak
+ *  returned by `secp256k1_silentpayments_recipient_create_label`.
  *
- *  For creating the labels cache data,
- *  `secp256k1_silentpayments_recipient_create_label` can be used.
+ *  A label entry bundles these two pieces of information. A label set is then
+ *  represented as a contiguous array of such entries.
  *
- *  Returns: pointer to the 32-byte label tweak if there is a match.
- *           NULL pointer if there is no match.
- *
- *  In:         label: pointer to the label public key to check (computed during
- *                     scanning)
- *      label_context: pointer to the recipients label cache.
+ *  The memory referenced by a label set is owned by the caller and must remain
+ *  valid for the duration of the scan.
  */
-typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const unsigned char* label33, const void* label_context);
+typedef struct secp256k1_silentpayments_label_entry {
+    secp256k1_pubkey label;
+    unsigned char label_tweak32[32];
+} secp256k1_silentpayments_label_entry;
+
+typedef struct secp256k1_silentpayments_label_set {
+    const secp256k1_silentpayments_label_entry *entries;
+    size_t n_entries;
+} secp256k1_silentpayments_label_set;
 
 /** Found outputs struct
  *
@@ -277,19 +283,22 @@ typedef struct secp256k1_silentpayments_found_output {
 
 /** Scan for Silent Payments transaction outputs.
  *
- *  Given a prevouts_summary object, a recipient's 32 byte scan key and spend public key,
- *  and the relevant transaction outputs, scan for outputs belonging to
- *  the recipient and return the tweak(s) needed for spending the output(s). An
- *  optional label_lookup callback function and label_context can be passed if
- *  the recipient uses labels. This allows for checking if a label exists in
- *  the recipients label cache and retrieving the label tweak during scanning.
+ *  Given a prevouts_summary object, a recipient's 32 byte scan key and unlabeled
+ *  spend public key, and the relevant transaction outputs, scan for outputs
+ *  belonging to the recipient and return the tweak(s) needed for spending the
+ *  output(s).
  *
- *  If used, the `label_lookup` function must return a pointer to a 32-byte label
- *  tweak if the label is found, or NULL otherwise. The returned pointer must remain
- *  valid until the next call to `label_lookup` or until the function returns,
- *  whichever comes first. It is not retained beyond that.
+ *  If the recipient uses labels, an optional label set can be provided. Each
+ *  entry in the label set corresponds to one labeled address derived from the
+ *  same unlabeled spend public key. Using an explicit label set allows the
+ *  implementation to scan in time O(N log N + N * M) where N is the number of
+ *  outputs and M the number of labels, even in adversarially ordered
+ *  transactions.
  *
- *  For creating the labels cache, `secp256k1_silentpayments_recipient_create_label`
+ *  If `labels` is NULL or labels->n_entries == 0, only the unlabeled address is
+ *  scanned for.
+ *
+ *  For creating label entries, `secp256k1_silentpayments_recipient_create_label`
  *  can be used.
  *
  *  Returns: 1 if output scanning was successful.
@@ -304,33 +313,30 @@ typedef struct secp256k1_silentpayments_found_output {
  *                               size of the found outputs array. This number
  *                               represents the number of outputs found while
  *                               scanning (0 if none are found).
- *  In:              tx_outputs: pointer to the transaction's x-only public key outputs
+ *  In:              tx_outputs: pointer to the transaction's x-only public key
+ *                               outputs
  *                 n_tx_outputs: the size of the tx_outputs array.
- *                   scan_key32: pointer to the recipient's 32 byte scan key. The scan
- *                               key is valid if it passes secp256k1_ec_seckey_verify
- *             prevouts_summary: pointer to the transaction prevouts summary data
- *                               (see `_recipient_prevouts_summary_create`).
- *       unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public key
- *                 label_lookup: pointer to a callback function for looking up
- *                               a label value. This function takes a label
- *                               public key as an argument and returns a pointer to
- *                               the label tweak if the label exists, otherwise
- *                               returns a NULL pointer (NULL if labels are not
- *                               used)
- *                label_context: pointer to a label context object (NULL if
- *                               labels are not used or context is not needed)
+ *                   scan_key32: pointer to the recipient's 32 byte scan key.
+ *                               The scan key is valid if it passes
+ *                               secp256k1_ec_seckey_verify.
+ *             prevouts_summary: pointer to the transaction prevouts summary
+ *                               data (see
+ *                               `secp256k1_silentpayments_recipient_prevouts_summary_create`).
+ *    unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public
+ *                               key
+ *                     labels: optional pointer to a label set (NULL if labels
+ *                               are not used).
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_scan_outputs(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs,
     size_t *n_found_outputs,
-    const secp256k1_xonly_pubkey * const *tx_outputs,
+    const secp256k1_xonly_pubkey **tx_outputs,
     size_t n_tx_outputs,
     const unsigned char *scan_key32,
     const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
     const secp256k1_pubkey *unlabeled_spend_pubkey,
-    const secp256k1_silentpayments_label_lookup label_lookup,
-    const void *label_context
+    const secp256k1_silentpayments_label_set *labels
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 
 #ifdef __cplusplus

@@ -107,6 +107,21 @@ static const secp256k1_silentpayments_recipient *recipient_ptrs[N_OUTPUTS];
 * is to represent the spend and scan public keys. */
 static unsigned char (*sp_addresses[N_OUTPUTS])[2][33];
 
+/* Fisher-Yates shuffle for output pointers */
+static void shuffle_outputs(secp256k1_xonly_pubkey **arr, size_t n) {
+    size_t i, j;
+    secp256k1_xonly_pubkey *tmp;
+    
+    if (n <= 1) return;
+    
+    for (i = n - 1; i > 0; i--) {
+        j = (size_t)(rand() % (i + 1));
+        tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+    }
+}
+
 int main(void) {
     unsigned char randomize[32];
     unsigned char serialized_xonly[32];
@@ -117,6 +132,9 @@ int main(void) {
     unsigned char bob_address[2][33];
     int ret;
     size_t i, n_found_outputs;
+
+    /* Seed random number generator for shuffling */
+    srand((unsigned int)time(NULL));
 
     /* Before we can call actual API functions, we need to create a "context" */
     secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -341,6 +359,10 @@ int main(void) {
                 printf("This transaction is not valid for Silent Payments, skipping.\n");
                 return EXIT_SUCCESS;
             }
+
+            /* Shuffle outputs before scanning to test out-of-order performance */
+            printf("Shuffling %d outputs before scanning...\n", N_OUTPUTS);
+            shuffle_outputs(tx_output_ptrs, N_OUTPUTS);
 
             /* Scan the transaction */
             n_found_outputs = 0;
