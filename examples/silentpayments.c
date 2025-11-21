@@ -365,7 +365,7 @@ int main(void) {
             start = clock();
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
-                (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, N_OUTPUTS,
+                (const secp256k1_xonly_pubkey**)tx_output_ptrs, N_OUTPUTS,
                 bob_scan_key,
                 &prevouts_summary,
                 &unlabeled_spend_pubkey,
@@ -446,7 +446,7 @@ int main(void) {
             n_found_outputs = 0;
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
-                (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, 1, /* dummy scan with one output (we only care about Bob) */
+                (const secp256k1_xonly_pubkey**)tx_output_ptrs, 1, /* dummy scan with one output (we only care about Bob) */
                 carol_scan_key,
                 &prevouts_summary,
                 &unlabeled_spend_pubkey,
