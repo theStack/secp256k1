@@ -500,7 +500,7 @@ int secp256k1_silentpayments_recipient_prevouts_summary_create(
 int secp256k1_silentpayments_recipient_scan_outputs(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs, size_t *n_found_outputs,
-    const secp256k1_xonly_pubkey * const *tx_outputs, size_t n_tx_outputs,
+    const secp256k1_xonly_pubkey **tx_outputs, size_t n_tx_outputs,
     const unsigned char *scan_key32,
     const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
     const secp256k1_pubkey *spend_pubkey,
@@ -512,7 +512,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     secp256k1_xonly_pubkey output_xonly;
     unsigned char shared_secret[33];
     const unsigned char *label_tweak = NULL;
-    size_t j, found_idx;
+    size_t j, found_idx, n_remaining_tx_outputs;
     uint32_t k;
     int found, combined, valid_scan_key, ret;
 
@@ -553,6 +553,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     secp256k1_scalar_clear(&scan_key_scalar);
 
     found_idx = 0;
+    n_remaining_tx_outputs = n_tx_outputs;
     for (k = 0; k < n_tx_outputs; k++) {
         secp256k1_ge output_ge = spend_pubkey_ge;
         /* Calculate the output_tweak and convert it to a scalar.
@@ -577,7 +578,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
         }
         found = 0;
         secp256k1_xonly_pubkey_save(&output_xonly, &output_ge);
-        for (j = 0; j < n_tx_outputs; j++) {
+        for (j = 0; j < n_remaining_tx_outputs; j++) {
             if (secp256k1_xonly_pubkey_cmp(ctx, &output_xonly, tx_outputs[j]) == 0) {
                 label_tweak = NULL;
                 found = 1;
@@ -665,6 +666,11 @@ int secp256k1_silentpayments_recipient_scan_outputs(
                 /* Set the label public key with an invalid public key value. */
                 memset(&found_outputs[k]->label, 0, sizeof(secp256k1_pubkey));
             }
+            /* Remove found entry from list of outputs to scan (shift remaining entries to the left) */
+            for (j = found_idx + 1; j < n_remaining_tx_outputs; j++) {
+                tx_outputs[j-1] = tx_outputs[j];
+            }
+            n_remaining_tx_outputs--;
             /* Reset everything for the next round of scanning. */
             label_tweak = NULL;
             /* BIP0352 specifies that k is serialized as a 4 byte (32 bit) value, so we check to make
