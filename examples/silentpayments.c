@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_silentpayments.h>
@@ -17,7 +18,7 @@
 #include "examples_util.h"
 
 #define N_INPUTS  2
-#define N_OUTPUTS 3
+#define N_OUTPUTS 23255 /* upper bound of maximum outputs per block: floor(1_000_000/43) */
 
 /* Static data for Bob and Carol's Silent Payments addresses */
 static unsigned char smallest_outpoint[36] = {
@@ -112,15 +113,21 @@ const unsigned char* label_lookup(
     return NULL;
 }
 
+static secp256k1_xonly_pubkey tx_inputs[N_INPUTS];
+static const secp256k1_xonly_pubkey *tx_input_ptrs[N_INPUTS];
+static secp256k1_xonly_pubkey tx_outputs[N_OUTPUTS];
+static secp256k1_xonly_pubkey *tx_output_ptrs[N_OUTPUTS];
+static secp256k1_silentpayments_found_output found_outputs[N_OUTPUTS];
+static secp256k1_silentpayments_found_output *found_output_ptrs[N_OUTPUTS];
+static secp256k1_silentpayments_recipient recipients[N_OUTPUTS];
+static const secp256k1_silentpayments_recipient *recipient_ptrs[N_OUTPUTS];
+/* 2D array for holding multiple public key pairs. The second index, i.e., [2],
+ * is to represent the spend and scan public keys. */
+static unsigned char (*sp_addresses[N_OUTPUTS])[2][33];
+
 int main(void) {
     unsigned char randomize[32];
     unsigned char serialized_xonly[32];
-    secp256k1_xonly_pubkey tx_inputs[N_INPUTS];
-    const secp256k1_xonly_pubkey *tx_input_ptrs[N_INPUTS];
-    secp256k1_xonly_pubkey tx_outputs[N_OUTPUTS];
-    secp256k1_xonly_pubkey *tx_output_ptrs[N_OUTPUTS];
-    secp256k1_silentpayments_found_output found_outputs[N_OUTPUTS];
-    secp256k1_silentpayments_found_output *found_output_ptrs[N_OUTPUTS];
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
     secp256k1_pubkey unlabeled_spend_pubkey;
     struct labels_cache bob_labels_cache;
@@ -209,12 +216,9 @@ int main(void) {
     {
         secp256k1_keypair sender_keypairs[N_INPUTS];
         const secp256k1_keypair *sender_keypair_ptrs[N_INPUTS];
-        secp256k1_silentpayments_recipient recipients[N_OUTPUTS];
-        const secp256k1_silentpayments_recipient *recipient_ptrs[N_OUTPUTS];
-        /* 2D array for holding multiple public key pairs. The second index, i.e., [2],
-         * is to represent the spend and scan public keys. */
-        unsigned char (*sp_addresses[N_OUTPUTS])[2][33];
         unsigned char seckey[32];
+
+        printf("Sending...\n");
 
         /*** Generate secret keys for the sender ***
          *
@@ -269,12 +273,12 @@ int main(void) {
         for (i = 0; i < N_OUTPUTS; i++) {
             ret = secp256k1_ec_pubkey_parse(ctx,
                 &recipients[i].scan_pubkey,
-                (*(sp_addresses[i]))[0],
+                (*(sp_addresses[1]))[0], /* to exercise worst-case scanning, use bob as recipient repeatedly */
                 33
             );
             ret &= secp256k1_ec_pubkey_parse(ctx,
                 &recipients[i].spend_pubkey,
-                (*(sp_addresses[i]))[1],
+                (*(sp_addresses[1]))[1], /* to exercise worst-case scanning, use bob as recipient repeatedly */
                 33
             );
             if (!ret) {
@@ -302,15 +306,15 @@ int main(void) {
             printf("Something went wrong, a recipient provided an invalid address.\n");
             return EXIT_FAILURE;
         }
-        printf("Alice created the following outputs for Bob and Carol:\n");
+        printf("Alice created the following outputs for Bob:\n...\n");
         for (i = 0; i < N_OUTPUTS; i++) {
-            printf("    ");
+            /* printf("    "); */
             ret = secp256k1_xonly_pubkey_serialize(ctx,
                 serialized_xonly,
                 &tx_outputs[i]
             );
             assert(ret);
-            print_hex(serialized_xonly, sizeof(serialized_xonly));
+            /* print_hex(serialized_xonly, sizeof(serialized_xonly)); */
         }
         /* It's best practice to try to clear secrets from memory after using
          * them. This is done because some bugs can allow an attacker to leak
@@ -328,6 +332,7 @@ int main(void) {
 
     /*** Receiving ***/
     {
+        printf("Receiving...\n");
         {
             /*** Scanning as a full node (Bob) ***
              *
@@ -337,6 +342,9 @@ int main(void) {
              *        `secp256k1_silentpayments_recipient_prevouts_summary_create`
              *     2. Call `secp256k1_silentpayments_recipient_scan_outputs`
              */
+            clock_t start, end;
+            double cpu_time_used;
+
             ret = secp256k1_silentpayments_recipient_prevouts_summary_create(ctx,
                 &prevouts_summary,
                 smallest_outpoint,
@@ -353,6 +361,8 @@ int main(void) {
 
             /* Scan the transaction */
             n_found_outputs = 0;
+
+            start = clock();
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
                 (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, N_OUTPUTS,
@@ -361,6 +371,10 @@ int main(void) {
                 &unlabeled_spend_pubkey,
                 label_lookup, &bob_labels_cache /* NULL, NULL for no labels */
             );
+            end = clock();
+            cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+            printf("Bob's scan took %f seconds\n", cpu_time_used);
+
             if (!ret) {
                 printf("This transaction is not valid for Silent Payments, skipping.\n");
                 return EXIT_SUCCESS;
@@ -371,15 +385,15 @@ int main(void) {
                 unsigned char full_seckey[32];
 
                 printf("\n");
-                printf("Bob found the following outputs: \n");
+                printf("Bob found the following outputs [%lu in total]: \n...\n", (unsigned long)n_found_outputs);
                 for (i = 0; i < n_found_outputs; i++) {
-                    printf("    ");
+                    /* printf("    "); */
                     ret = secp256k1_xonly_pubkey_serialize(ctx,
                         serialized_xonly,
                         &found_outputs[i].output
                     );
                     assert(ret);
-                    print_hex(serialized_xonly, sizeof(serialized_xonly));
+                    /* print_hex(serialized_xonly, sizeof(serialized_xonly)); */
 
                     /* Verify that this output is spendable by Bob by reconstructing the full
                      * secret key for the xonly output.
@@ -432,7 +446,7 @@ int main(void) {
             n_found_outputs = 0;
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
-                (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, N_OUTPUTS,
+                (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, 1, /* dummy scan with one output (we only care about Bob) */
                 carol_scan_key,
                 &prevouts_summary,
                 &unlabeled_spend_pubkey,
