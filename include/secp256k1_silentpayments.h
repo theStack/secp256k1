@@ -324,7 +324,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs,
     size_t *n_found_outputs,
-    const secp256k1_xonly_pubkey * const *tx_outputs,
+    const secp256k1_xonly_pubkey **tx_outputs,
     size_t n_tx_outputs,
     const unsigned char *scan_key32,
     const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
