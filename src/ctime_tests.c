@@ -336,7 +336,8 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     /* It is sufficient to check _recipient_scan_outputs without a label lookup function, since the shared secret is created once (which is where the constant timeness matters)
      * and then reused for the rest of the scanning logic.
      */
-    CHECK(secp256k1_silentpayments_recipient_scan_outputs(ctx, found_outputs, &n_found_outputs, tx_outputs, 1, key, &prevouts_summary, &recipient.spend_pubkey, NULL, NULL));
+    CHECK(secp256k1_silentpayments_recipient_scan_outputs(ctx, found_outputs, &n_found_outputs, tx_outputs, 1, key, &prevouts_summary, &recipient.spend_pubkey, NULL));
+
 
 #endif
 }
