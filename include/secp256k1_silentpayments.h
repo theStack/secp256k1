@@ -333,6 +333,31 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     const void *label_context
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 
+/************************************************/
+/********** Label-set scanning approach *********/
+/************************************************/
+typedef struct secp256k1_silentpayments_label_entry {
+    secp256k1_pubkey label;
+    unsigned char label_tweak32[32];
+} secp256k1_silentpayments_label_entry;
+
+typedef struct secp256k1_silentpayments_label_set {
+    const secp256k1_silentpayments_label_entry *entries;
+    size_t n_entries;
+} secp256k1_silentpayments_label_set;
+
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_scan_outputs2(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_found_output **found_outputs,
+    size_t *n_found_outputs,
+    const secp256k1_xonly_pubkey **tx_outputs,
+    size_t n_tx_outputs,
+    const unsigned char *scan_key32,
+    const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
+    const secp256k1_pubkey *unlabeled_spend_pubkey,
+    const secp256k1_silentpayments_label_set *labels
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
+
 #ifdef __cplusplus
 }
 #endif
