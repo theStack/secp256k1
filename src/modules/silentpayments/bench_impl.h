@@ -18,8 +18,10 @@ typedef struct {
     unsigned char scan_key[32];
     unsigned char input_pubkey33[33];
     secp256k1_xonly_pubkey tx_outputs[MAX_TX_OUTPUTS];
+    unsigned char tx_outputs2[MAX_TX_OUTPUTS][32];
     secp256k1_xonly_pubkey tx_inputs[2];
     secp256k1_silentpayments_found_output found_outputs[MAX_TX_OUTPUTS];
+    secp256k1_silentpayments_found_output2 found_outputs2[MAX_TX_OUTPUTS];
     secp256k1_silentpayments_label_entry label_entries[MAX_LABELS];
     unsigned char scalar[32];
     unsigned char smallest_outpoint[36];
@@ -77,7 +79,10 @@ static void bench_silentpayments_scan_setup(void* arg) {
         for (j = 0;; j++) {
             secp256k1_write_be32(&buf[4], j);
             CHECK(secp256k1_tagged_sha256(data->ctx, raw_xpk, (const unsigned char*)"sp-bench-outputs", 16, buf, sizeof(buf)));
-            if (secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], raw_xpk)) break;
+            if (secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], raw_xpk)) {
+                memcpy(&data->tx_outputs2[i][0], raw_xpk, 32);
+                break;
+            }
         }
     }
     for (i = 0; i < MAX_LABELS; i++) {
@@ -101,7 +106,7 @@ static void bench_silentpayments_scan_setup(void* arg) {
 }
 
 static void bench_silentpayments_full_tx_scan(void* arg, int iters) {
-    int i;
+    int i, j;
     size_t n_found = 0;
     secp256k1_silentpayments_found_output *found_output_ptrs[MAX_TX_OUTPUTS];
     const secp256k1_xonly_pubkey *tx_output_ptrs[MAX_TX_OUTPUTS];
@@ -125,6 +130,9 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters) {
             tx_input_ptrs, 2,
             NULL, 0
         ));
+        for (j = 0; j < data->n_outputs; j++) {
+            CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[j], &data->tx_outputs2[j][0]));
+        }
         CHECK(secp256k1_silentpayments_recipient_scan_outputs(data->ctx,
             found_output_ptrs, &n_found,
             tx_output_ptrs, data->n_outputs,
@@ -141,8 +149,8 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters) {
 static void bench_silentpayments_full_tx_scan2(void* arg, int iters) {
     int i;
     size_t n_found = 0;
-    secp256k1_silentpayments_found_output *found_output_ptrs[MAX_TX_OUTPUTS];
-    const secp256k1_xonly_pubkey *tx_output_ptrs[MAX_TX_OUTPUTS];
+    secp256k1_silentpayments_found_output2 *found_output_ptrs[MAX_TX_OUTPUTS];
+    const unsigned char *tx_output_ptrs[MAX_TX_OUTPUTS];
     const secp256k1_xonly_pubkey *tx_input_ptrs[2];
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
@@ -158,8 +166,8 @@ static void bench_silentpayments_full_tx_scan2(void* arg, int iters) {
         tx_input_ptrs[i] = &data->tx_inputs[i];
     }
     for (i = 0; i < data->n_outputs; i++) {
-        found_output_ptrs[i] = &data->found_outputs[i];
-        tx_output_ptrs[i] = &data->tx_outputs[i];
+        found_output_ptrs[i] = &data->found_outputs2[i];
+        tx_output_ptrs[i] = &data->tx_outputs2[i][0];
     }
     for (i = 0; i < iters; i++) {
         CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(data->ctx,

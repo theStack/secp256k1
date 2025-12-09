@@ -259,7 +259,7 @@ typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const unsi
  *
  *  Struct for holding a found output along with data needed to spend it later.
  *
- *            output: the x-only public key for the taproot output
+ *            output: the serialized x-only public key for the taproot output
  *             tweak: the 32-byte tweak needed to spend the output
  *  found_with_label: boolean value to indicate if the output was sent to a
  *                    labeled address. If true, label will be set with a valid
@@ -274,6 +274,13 @@ typedef struct secp256k1_silentpayments_found_output {
     int found_with_label;
     secp256k1_pubkey label;
 } secp256k1_silentpayments_found_output;
+
+typedef struct secp256k1_silentpayments_found_output2 {
+    unsigned char output[32];
+    unsigned char tweak[32];
+    int found_with_label;
+    secp256k1_pubkey label;
+} secp256k1_silentpayments_found_output2;
 
 /** Scan for Silent Payments transaction outputs.
  *
@@ -348,9 +355,9 @@ typedef struct secp256k1_silentpayments_label_set {
 
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_scan_outputs2(
     const secp256k1_context *ctx,
-    secp256k1_silentpayments_found_output **found_outputs,
+    secp256k1_silentpayments_found_output2 **found_outputs,
     size_t *n_found_outputs,
-    const secp256k1_xonly_pubkey **tx_outputs,
+    const unsigned char **tx_outputs,
     size_t n_tx_outputs,
     const unsigned char *scan_key32,
     const secp256k1_silentpayments_prevouts_summary *prevouts_summary,

@@ -679,19 +679,18 @@ int secp256k1_silentpayments_recipient_scan_outputs(
 /************************************************/
 /********** Label-set scanning approach *********/
 /************************************************/
-static int secp256k1_silentpayments_xonly_pubkey_sort_cmp(const void* pk1, const void* pk2, void *ctx) {
-    return secp256k1_xonly_pubkey_cmp((secp256k1_context *)ctx,
-        *(secp256k1_xonly_pubkey **)pk1,
-        *(secp256k1_xonly_pubkey **)pk2);
+static int secp256k1_silentpayments_tx_outputs_sort_cmp(const void* out1, const void* out2, void *cmp_data) {
+    (void)cmp_data;
+    return secp256k1_memcmp_var((unsigned char *)out1, (unsigned char *)out2, 32);
 }
 
-static int secp256k1_silentpayments_tx_output_find(const secp256k1_context *ctx, const secp256k1_xonly_pubkey **tx_outputs, size_t n_entries, const secp256k1_xonly_pubkey *tx_output) {
+static int secp256k1_silentpayments_tx_output_find(const unsigned char **tx_outputs, size_t n_entries, const unsigned char *tx_output) {
     size_t low = 0;
     size_t high = n_entries;
 
     while (low < high) {
         size_t mid = (low + high) / 2;
-        int cmp = secp256k1_xonly_pubkey_cmp(ctx, tx_output, tx_outputs[mid]);
+        int cmp = secp256k1_memcmp_var(tx_output, tx_outputs[mid], 32);
         if (cmp == 0) {
             return (int)mid;
         } else if (cmp < 0) {
@@ -705,8 +704,8 @@ static int secp256k1_silentpayments_tx_output_find(const secp256k1_context *ctx,
 
 int secp256k1_silentpayments_recipient_scan_outputs2(
     const secp256k1_context *ctx,
-    secp256k1_silentpayments_found_output **found_outputs, size_t *n_found_outputs,
-    const secp256k1_xonly_pubkey **tx_outputs, size_t n_tx_outputs,
+    secp256k1_silentpayments_found_output2 **found_outputs, size_t *n_found_outputs,
+    const unsigned char **tx_outputs, size_t n_tx_outputs,
     const unsigned char *scan_key32,
     const secp256k1_silentpayments_prevouts_summary *prevouts_summary,
     const secp256k1_pubkey *unlabeled_spend_pubkey,
@@ -764,12 +763,12 @@ int secp256k1_silentpayments_recipient_scan_outputs2(
     secp256k1_scalar_clear(&scan_key_scalar);
 
     /* Sort transaction outputs to find them fast using binary search */
-    secp256k1_hsort(tx_outputs, n_tx_outputs, sizeof(*tx_outputs), secp256k1_silentpayments_xonly_pubkey_sort_cmp, (void *)ctx);
+    secp256k1_hsort(tx_outputs, n_tx_outputs, sizeof(*tx_outputs), secp256k1_silentpayments_tx_outputs_sort_cmp, NULL);
 
     /* Main scan loop over k */
     for (k = 0; k < n_tx_outputs; ++k) {
         secp256k1_ge output_unlabeled_ge = unlabeled_spend_pubkey_ge;
-        secp256k1_xonly_pubkey output_xonly;
+        unsigned char output_ser[33];
         int idx;
         int found_for_k = 0;
 
@@ -788,12 +787,12 @@ int secp256k1_silentpayments_recipient_scan_outputs2(
         }
 
         /* First, check for an unlabeled match. */
-        secp256k1_xonly_pubkey_save(&output_xonly, &output_unlabeled_ge);
-        idx = secp256k1_silentpayments_tx_output_find(ctx, tx_outputs, n_tx_outputs, &output_xonly);
+        secp256k1_eckey_pubkey_serialize33(&output_unlabeled_ge, output_ser);
+        idx = secp256k1_silentpayments_tx_output_find(tx_outputs, n_tx_outputs, &output_ser[1]);
         if (idx >= 0) {
-            secp256k1_silentpayments_found_output *fo = found_outputs[found_count];
+            secp256k1_silentpayments_found_output2 *fo = found_outputs[found_count];
 
-            fo->output = *tx_outputs[idx];
+            memcpy(&fo->output[0], &output_ser[1], 32);
             secp256k1_scalar_get_b32(fo->tweak, &output_tweak_scalar);
             fo->found_with_label = 0;
             memset(&fo->label, 0, sizeof(secp256k1_pubkey));
@@ -823,12 +822,12 @@ int secp256k1_silentpayments_recipient_scan_outputs2(
                     return 0;
                 }
                 secp256k1_ge_set_gej_var(&output_labeled_ge, &out_j);
-                secp256k1_xonly_pubkey_save(&output_xonly, &output_labeled_ge);
-                idx = secp256k1_silentpayments_tx_output_find(ctx, tx_outputs, n_tx_outputs, &output_xonly);
+                secp256k1_eckey_pubkey_serialize33(&output_unlabeled_ge, output_ser);
+                idx = secp256k1_silentpayments_tx_output_find(tx_outputs, n_tx_outputs, &output_ser[1]);
                 if (idx >= 0) {
-                    secp256k1_silentpayments_found_output *fo = found_outputs[found_count];
+                    secp256k1_silentpayments_found_output2 *fo = found_outputs[found_count];
 
-                    fo->output = *tx_outputs[idx];
+                    memcpy(&fo->output[0], &output_ser[1], 32);
                     secp256k1_scalar_get_b32(fo->tweak, &output_tweak_scalar);
                     fo->found_with_label = 1;
                     memcpy(&fo->label, &labels->entries[li].label, sizeof(secp256k1_pubkey));
