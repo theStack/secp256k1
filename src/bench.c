@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
                          "ecdsa_recover", "schnorrsig", "schnorrsig_verify", "schnorrsig_sign", "ec",
                          "keygen", "ec_keygen", "ellswift", "encode", "ellswift_encode", "decode",
                          "ellswift_decode", "ellswift_keygen", "ellswift_ecdh", "silentpayments",
-                         "silentpayments_full_scan", "silentpayments_full_scan_with_labels"};
+                         "silentpayments_full_scan", "sp_scan_with_labels"};
     size_t valid_args_size = sizeof(valid_args)/sizeof(valid_args[0]);
     int invalid_args = have_invalid_args(argc, argv, valid_args, valid_args_size);
 
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
 
 #ifndef ENABLE_MODULE_SILENTPAYMENTS
     if (have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan") ||
-        have_flag(argc, argv, "silentpayments_full_scan_with_labels")) {
+        have_flag(argc, argv, "sp_scan_with_labels")) {
         fprintf(stderr, "./bench: silentpayments module not enabled.\n");
         fprintf(stderr, "See README.md for configuration instructions.\n\n");
         return EXIT_FAILURE;
