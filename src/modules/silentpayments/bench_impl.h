@@ -10,7 +10,8 @@
 #include "../../../include/secp256k1_silentpayments.h"
 #include "label_cache.h"
 
-#define LABEL_CACHE_ENTRIES 1000000
+#define TINY_LABEL_CACHE_ENTRIES 1
+#define HUGE_LABEL_CACHE_ENTRIES 1000000
 
 typedef struct {
     secp256k1_context *ctx;
@@ -22,7 +23,8 @@ typedef struct {
     secp256k1_silentpayments_found_output found_outputs[2];
     unsigned char scalar[32];
     unsigned char smallest_outpoint[36];
-    label_cache_t *label_cache;
+    label_cache_t *label_cache_tiny;
+    label_cache_t *label_cache_huge;
 } bench_silentpayments_data;
 
 static void bench_silentpayments_scan_setup(void* arg) {
@@ -79,12 +81,13 @@ static void bench_silentpayments_scan_setup(void* arg) {
     memcpy(data->scan_key, scan_key, 32);
     memcpy(data->smallest_outpoint, smallest_outpoint, 36);
 
-    data->label_cache = label_cache_init();
+    data->label_cache_tiny = label_cache_init();
+    data->label_cache_huge = label_cache_init();
     /* create a giant label cache with fake entries (note that in order to avoid point
      * multiplications, these are created pseudo-randomly and thus are not necessarily
      * cryptograhpically valid, but they still match the serialized labels format, i.e. first byte
-     * either 0x02 or 0x03, while the remaining 32 bytes are random) */
-    for (i = 0; i < LABEL_CACHE_ENTRIES; i++) {
+     * is either 0x02 or 0x03, while the remaining 32 bytes are random) */
+    for (i = 0; i < HUGE_LABEL_CACHE_ENTRIES; i++) {
         unsigned char msg[8];
         unsigned char fake_label_tweak[32];
         unsigned char fake_label[33];
@@ -94,13 +97,18 @@ static void bench_silentpayments_scan_setup(void* arg) {
         CHECK(secp256k1_tagged_sha256(data->ctx, fake_label_tweak, (unsigned char*)"fake_label_tweak", 16, msg, 8));
         fake_label[0] = (i % 2) == 1 ? 0x02 : 0x03;
         CHECK(secp256k1_tagged_sha256(data->ctx, &fake_label[1], (unsigned char*)"fake_label", 10, msg, 8));
-        ret = label_cache_put(data->label_cache, fake_label, fake_label_tweak);
+        ret = label_cache_put(data->label_cache_huge, fake_label, fake_label_tweak);
         CHECK(ret == 1); /* 1 -> new slot */
+        if (i == 0) { /* for the tiny label cache, only insert one entry */
+            ret = label_cache_put(data->label_cache_tiny, fake_label, fake_label_tweak);
+            CHECK(ret == 1);
+        }
     }
-    CHECK(label_cache_size(data->label_cache) == LABEL_CACHE_ENTRIES);
+    CHECK(label_cache_size(data->label_cache_tiny) == TINY_LABEL_CACHE_ENTRIES);
+    CHECK(label_cache_size(data->label_cache_huge) == HUGE_LABEL_CACHE_ENTRIES);
     /* paranoid sanity check: verify that the newly inserted elements can all be looked up,
      * and that the same amount of randomly generated labels (in a different way) _can't_ be looked up */
-    for (i = 0; i < LABEL_CACHE_ENTRIES; i++) {
+    for (i = 0; i < HUGE_LABEL_CACHE_ENTRIES; i++) {
         unsigned char msg[8];
         unsigned char expected_fake_label_tweak[32];
         unsigned char fake_label_in_cache[33];
@@ -115,12 +123,12 @@ static void bench_silentpayments_scan_setup(void* arg) {
         CHECK(secp256k1_tagged_sha256(data->ctx, &fake_label_not_in_cache[1], (unsigned char*)"fake_label_outside", 18, msg, 8));
 
         /* label expected to be in cache */
-        lookup_result = label_cache_get(data->label_cache, fake_label_in_cache);
+        lookup_result = label_cache_get(data->label_cache_huge, fake_label_in_cache);
         CHECK(lookup_result != NULL);
         CHECK(secp256k1_memcmp_var(lookup_result, expected_fake_label_tweak, 32) == 0);
 
         /* label expected not to be in cache */
-        lookup_result = label_cache_get(data->label_cache, fake_label_not_in_cache);
+        lookup_result = label_cache_get(data->label_cache_huge, fake_label_not_in_cache);
         CHECK(lookup_result == NULL);
     }
 }
@@ -128,10 +136,11 @@ static void bench_silentpayments_scan_setup(void* arg) {
 static void bench_silentpayments_scan_teardown(void* arg, int iters) {
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     (void)iters;
-    label_cache_destroy(data->label_cache);
+    label_cache_destroy(data->label_cache_tiny);
+    label_cache_destroy(data->label_cache_huge);
 }
 
-static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labels) {
+static void bench_silentpayments_full_tx_scan(void* arg, int iters, label_cache_t *label_cache) {
     int i;
     uint32_t n_found = 0;
     secp256k1_silentpayments_found_output *found_output_ptrs[2];
@@ -139,8 +148,8 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
     const secp256k1_xonly_pubkey *tx_input_ptrs[2];
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
-    const secp256k1_silentpayments_label_lookup label_lookup_fn = use_labels ? label_cache_lookup_fun : NULL;
-    const void *label_context = use_labels ? data->label_cache : NULL;
+    const secp256k1_silentpayments_label_lookup label_lookup_fn = label_cache != NULL ? label_cache_lookup_fun : NULL;
+    const void *label_context = label_cache;
 
     for (i = 0; i < 2; i++) {
         found_output_ptrs[i] = &data->found_outputs[i];
@@ -167,11 +176,19 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
 }
 
 static void bench_silentpayments_full_scan(void *arg, int iters) {
-    bench_silentpayments_full_tx_scan(arg, iters, 0);
+    bench_silentpayments_full_tx_scan(arg, iters, NULL);
 }
 
-static void bench_silentpayments_full_scan_with_labels(void *arg, int iters) {
-    bench_silentpayments_full_tx_scan(arg, iters, 1);
+static void bench_silentpayments_full_scan_with_labels_tiny(void *arg, int iters) {
+    bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
+    CHECK(label_cache_size(data->label_cache_tiny) == TINY_LABEL_CACHE_ENTRIES); /* sanity check */
+    bench_silentpayments_full_tx_scan(arg, iters, data->label_cache_tiny);
+}
+
+static void bench_silentpayments_full_scan_with_labels_huge(void *arg, int iters) {
+    bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
+    CHECK(label_cache_size(data->label_cache_huge) == HUGE_LABEL_CACHE_ENTRIES); /* sanity check */
+    bench_silentpayments_full_tx_scan(arg, iters, data->label_cache_huge);
 }
 
 static void run_silentpayments_bench(int iters, int argc, char** argv) {
@@ -181,7 +198,8 @@ static void run_silentpayments_bench(int iters, int argc, char** argv) {
     data.ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan")) run_benchmark("silentpayments_full_scan", bench_silentpayments_full_scan, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 10, iters);
-    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan_with_labels")) run_benchmark("silentpayments_full_scan_with_labels", bench_silentpayments_full_scan_with_labels, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 10, iters);
+    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan_with_labels")) run_benchmark("silentpayments_full_scan_with_labels_tiny", bench_silentpayments_full_scan_with_labels_tiny, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 10, iters);
+    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan_with_labels")) run_benchmark("silentpayments_full_scan_with_labels_huge", bench_silentpayments_full_scan_with_labels_huge, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 10, iters);
 
     secp256k1_context_destroy(data.ctx);
 }
