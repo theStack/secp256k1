@@ -9,14 +9,16 @@
 
 #include "../../../include/secp256k1_silentpayments.h"
 
+#define NUM_TX_OUTPUTS 10
+
 typedef struct {
     secp256k1_context *ctx;
     secp256k1_pubkey spend_pubkeys[1];
     unsigned char scan_key[32];
     unsigned char input_pubkey33[33];
-    secp256k1_xonly_pubkey tx_outputs[2];
+    secp256k1_xonly_pubkey tx_outputs[NUM_TX_OUTPUTS];
     secp256k1_xonly_pubkey tx_inputs[2];
-    secp256k1_silentpayments_found_output found_outputs[2];
+    secp256k1_silentpayments_found_output found_outputs[NUM_TX_OUTPUTS];
     unsigned char scalar[32];
     unsigned char smallest_outpoint[36];
 } bench_silentpayments_data;
@@ -68,8 +70,8 @@ static void bench_silentpayments_scan_setup(void* arg) {
     for (i = 0; i < 32; i++) {
         data->scalar[i] = i + 1;
     }
-    for (i = 0; i < 2; i++) {
-        CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], tx_outputs[i]));
+    for (i = 0; i < NUM_TX_OUTPUTS; i++) {
+        CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], tx_outputs[i%2]));
     }
     /* Create the first input public key from the scalar.
      * This input is also used to create the serialized prevouts_summary object for the light client
@@ -88,8 +90,8 @@ static void bench_silentpayments_scan_setup(void* arg) {
 static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labels) {
     int i;
     uint32_t n_found = 0;
-    secp256k1_silentpayments_found_output *found_output_ptrs[2];
-    const secp256k1_xonly_pubkey *tx_output_ptrs[2];
+    secp256k1_silentpayments_found_output *found_output_ptrs[NUM_TX_OUTPUTS];
+    const secp256k1_xonly_pubkey *tx_output_ptrs[NUM_TX_OUTPUTS];
     const secp256k1_xonly_pubkey *tx_input_ptrs[2];
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
@@ -97,9 +99,11 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
     const void *label_context = use_labels ? label_cache : NULL;
 
     for (i = 0; i < 2; i++) {
+        tx_input_ptrs[i] = &data->tx_inputs[i];
+    }
+    for (i = 0; i < NUM_TX_OUTPUTS; i++) {
         found_output_ptrs[i] = &data->found_outputs[i];
         tx_output_ptrs[i] = &data->tx_outputs[i];
-        tx_input_ptrs[i] = &data->tx_inputs[i];
     }
     for (i = 0; i < iters; i++) {
         CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(data->ctx,
@@ -110,7 +114,7 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labe
         ));
         CHECK(secp256k1_silentpayments_recipient_scan_outputs(data->ctx,
             found_output_ptrs, &n_found,
-            tx_output_ptrs, 2,
+            tx_output_ptrs, NUM_TX_OUTPUTS,
             data->scan_key,
             &prevouts_summary,
             &data->spend_pubkeys[0],
