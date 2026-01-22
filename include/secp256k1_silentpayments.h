@@ -311,6 +311,10 @@ typedef struct secp256k1_silentpayments_found_output {
     secp256k1_silentpayments_label label;
 } secp256k1_silentpayments_found_output;
 
+/* set to 1 if the "ordered k" protocol rule is enabled, i.e. outputs have to
+ * appear in the order of their k values (within the same recipient group) */
+#define SP_ORDERED_K_RULE_ENABLED 0
+
 /** Scan for Silent Payments transaction outputs.
  *
  *  Given a prevouts_summary object, a recipient's 32 byte scan key and spend public key,

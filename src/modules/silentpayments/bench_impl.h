@@ -9,40 +9,43 @@
 
 #include "../../../include/secp256k1_silentpayments.h"
 
+/* upper bound of maximum taproot outputs per block: floor(1_000_000/43)
+ * (needed for constructing the "worst-case scanning attack", where a single
+ *  tx fills up a full bock of taproot outputs that all go to the same scankey group) */
+#define MAX_P2TR_OUTPUTS_PER_BLOCK 23255
+
+#define SP_BENCH_MAX_INPUTS  1
+#define SP_BENCH_MAX_OUTPUTS MAX_P2TR_OUTPUTS_PER_BLOCK
+
 typedef struct {
     secp256k1_context *ctx;
-    secp256k1_pubkey spend_pubkeys[1];
+    secp256k1_pubkey spend_pubkey;
     unsigned char scan_key[32];
-    unsigned char input_pubkey33[33];
-    secp256k1_xonly_pubkey tx_outputs[2];
-    secp256k1_xonly_pubkey tx_inputs[2];
-    secp256k1_silentpayments_found_output found_outputs[2];
+    secp256k1_xonly_pubkey *tx_outputs;
+    secp256k1_xonly_pubkey **tx_outputs_ptrs;
+    secp256k1_xonly_pubkey tx_inputs[SP_BENCH_MAX_INPUTS];
+    const secp256k1_xonly_pubkey *tx_inputs_ptrs[SP_BENCH_MAX_INPUTS];
+    secp256k1_silentpayments_found_output *found_outputs;
+    secp256k1_silentpayments_found_output **found_outputs_ptrs;
     unsigned char scalar[32];
     unsigned char smallest_outpoint[36];
+    unsigned char label[33];
+    unsigned char label_tweak[32];
+    int max_k;
+    int num_outputs;
 } bench_silentpayments_data;
 
-/* we need a non-null pointer for the cache */
-static int noop;
-void* label_cache = &noop;
 const unsigned char* label_lookup(const unsigned char* key, const void* cache_ptr) {
-    (void)key;
-    (void)cache_ptr;
+    bench_silentpayments_data *data = (bench_silentpayments_data*)cache_ptr;
+    if (secp256k1_memcmp_var(key, data->label, 33) == 0) {
+        return data->label_tweak;
+    }
     return NULL;
 }
 
 static void bench_silentpayments_scan_setup(void* arg) {
     int i;
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
-    const unsigned char tx_outputs[2][32] = {
-        {0x84,0x17,0x92,0xc3,0x3c,0x9d,0xc6,0x19,0x3e,0x76,0x74,0x41,0x34,0x12,0x5d,0x40,0xad,0xd8,0xf2,0xf4,0xa9,0x64,0x75,0xf2,0x8b,0xa1,0x50,0xbe,0x03,0x2d,0x64,0xe8},
-        {0x2e,0x84,0x7b,0xb0,0x1d,0x1b,0x49,0x1d,0xa5,0x12,0xdd,0xd7,0x60,0xb8,0x50,0x96,0x17,0xee,0x38,0x05,0x70,0x03,0xd6,0x11,0x5d,0x00,0xba,0x56,0x24,0x51,0x32,0x3a},
-    };
-    const unsigned char static_tx_input[32] = {
-        0xf2,0x07,0x16,0x2b,0x1a,0x7a,0xbc,0x51,
-        0xc4,0x20,0x17,0xbe,0xf0,0x55,0xe9,0xec,
-        0x1e,0xfc,0x3d,0x35,0x67,0xcb,0x72,0x03,
-        0x57,0xe2,0xb8,0x43,0x25,0xdb,0x33,0xac
-    };
     const unsigned char smallest_outpoint[36] = {
         0x16, 0x9e, 0x1e, 0x83, 0xe9, 0x30, 0x85, 0x33, 0x91,
         0xbc, 0x6f, 0x35, 0xf6, 0x05, 0xc6, 0x75, 0x4c, 0xfe,
@@ -62,80 +65,164 @@ static void bench_silentpayments_scan_setup(void* arg) {
         0xd4,0x7e,0xae,0x26,0x3d,0x7b,0xc0,0x31
     };
     secp256k1_keypair input_keypair;
-    secp256k1_pubkey input_pubkey;
     size_t pubkeylen = 33;
 
     for (i = 0; i < 32; i++) {
         data->scalar[i] = i + 1;
     }
-    for (i = 0; i < 2; i++) {
-        CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], tx_outputs[i]));
-    }
-    /* Create the first input public key from the scalar.
-     * This input is also used to create the serialized prevouts_summary object for the light client
-     */
+    /* Create the first input public key for the full scan from the scalar. */
     CHECK(secp256k1_keypair_create(data->ctx, &input_keypair, data->scalar));
-    CHECK(secp256k1_keypair_pub(data->ctx, &input_pubkey, &input_keypair));
-    CHECK(secp256k1_ec_pubkey_serialize(data->ctx, data->input_pubkey33, &pubkeylen, &input_pubkey, SECP256K1_EC_COMPRESSED));
-    /* Create the input public keys for the full scan */
     CHECK(secp256k1_keypair_xonly_pub(data->ctx, &data->tx_inputs[0], NULL, &input_keypair));
-    CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_inputs[1], static_tx_input));
-    CHECK(secp256k1_ec_pubkey_parse(data->ctx, &data->spend_pubkeys[0], spend_pubkey, pubkeylen));
+    data->tx_inputs_ptrs[0] = &data->tx_inputs[0];
+    CHECK(secp256k1_ec_pubkey_parse(data->ctx, &data->spend_pubkey, spend_pubkey, pubkeylen));
     memcpy(data->scan_key, scan_key, 32);
     memcpy(data->smallest_outpoint, smallest_outpoint, 36);
+
+    /* prepare transaction outputs for the "worst-case scanning attack",
+     * can be used for typical scanning scenarios as well */
+    {
+        secp256k1_silentpayments_recipient *recipients = malloc(sizeof(secp256k1_silentpayments_recipient) * data->num_outputs);
+        const secp256k1_silentpayments_recipient **recipients_ptrs = malloc(sizeof(secp256k1_silentpayments_recipient*) * data->num_outputs);
+        const secp256k1_keypair *taproot_keypairs_ptrs[SP_BENCH_MAX_INPUTS];
+        secp256k1_pubkey scan_pubkey, other_scan_pubkey;
+        unsigned char other_scan_seckey[32] = {99};
+        secp256k1_silentpayments_label label;
+        secp256k1_pubkey labeled_spend_pubkey;
+        int index_first_k;
+
+        CHECK(data->num_outputs <= SP_BENCH_MAX_OUTPUTS);
+        CHECK(data->max_k <= data->num_outputs);
+        index_first_k = data->num_outputs - data->max_k;
+
+        CHECK(secp256k1_ec_pubkey_create(data->ctx, &scan_pubkey, data->scan_key));
+        CHECK(secp256k1_ec_pubkey_create(data->ctx, &other_scan_pubkey, other_scan_seckey));
+
+        CHECK(secp256k1_silentpayments_recipient_label_create(data->ctx, &label, data->label_tweak, data->scan_key, 0));
+        CHECK(secp256k1_silentpayments_recipient_label_serialize(data->ctx, data->label, &label));
+        CHECK(secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(data->ctx,
+            &labeled_spend_pubkey, &data->spend_pubkey, &label));
+
+        data->tx_outputs = malloc(sizeof(secp256k1_xonly_pubkey) * data->num_outputs);
+        data->tx_outputs_ptrs = malloc(sizeof(secp256k1_xonly_pubkey*) * data->num_outputs);
+        data->found_outputs = malloc(sizeof(secp256k1_silentpayments_found_output) * data->num_outputs);
+        data->found_outputs_ptrs = malloc(sizeof(secp256k1_silentpayments_found_output*) * data->num_outputs);
+
+        taproot_keypairs_ptrs[0] = &input_keypair;
+        for (i = 0; i < data->num_outputs; i++) {
+            data->tx_outputs_ptrs[i] = &data->tx_outputs[i];
+            recipients_ptrs[i] = &recipients[i];
+            recipients[i].spend_pubkey = labeled_spend_pubkey;
+            if (i >= index_first_k) {
+                recipients[i].scan_pubkey = scan_pubkey;
+            } else {
+                recipients[i].scan_pubkey = other_scan_pubkey;
+            }
+            recipients[i].index = i;
+        }
+        CHECK(secp256k1_silentpayments_sender_create_outputs(data->ctx, data->tx_outputs_ptrs, recipients_ptrs,
+            data->num_outputs, data->smallest_outpoint, taproot_keypairs_ptrs, SP_BENCH_MAX_INPUTS, NULL, 0));
+
+        for (i = 0; i < data->num_outputs; i++) {
+            data->found_outputs_ptrs[i] = &data->found_outputs[i];
+        }
+#if !SP_ORDERED_K_RULE_ENABLED
+        /* reverse outputs within k group to simulate worst-case */
+        for (i = 0; i < data->max_k / 2; i++) {
+            int pos = index_first_k + i;
+            secp256k1_xonly_pubkey *tmp = data->tx_outputs_ptrs[pos];
+            data->tx_outputs_ptrs[pos] = data->tx_outputs_ptrs[data->num_outputs - pos - 1];
+            data->tx_outputs_ptrs[data->num_outputs - pos - 1] = tmp;
+        }
+#endif
+
+        free(recipients_ptrs);
+        free(recipients);
+    }
 }
 
-static void bench_silentpayments_full_tx_scan(void* arg, int iters, int use_labels) {
-    int i;
-    uint32_t n_found = 0;
-    secp256k1_silentpayments_found_output *found_output_ptrs[2];
-    const secp256k1_xonly_pubkey *tx_output_ptrs[2];
-    const secp256k1_xonly_pubkey *tx_input_ptrs[2];
+static void bench_silentpayments_scan_teardown(void* arg, int iters) {
+    bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
+    (void)iters;
+
+    free(data->tx_outputs);
+    free(data->tx_outputs_ptrs);
+    free(data->found_outputs);
+    free(data->found_outputs_ptrs);
+}
+
+static void bench_silentpayments_scan(void* arg, int iters, int has_matches) {
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
-    const secp256k1_silentpayments_label_lookup label_lookup_fn = use_labels ? label_lookup : NULL;
-    const void *label_context = use_labels ? label_cache : NULL;
+    uint32_t n_found = 0;
+    int i;
+    const secp256k1_silentpayments_label_lookup label_lookup_fn = label_lookup;
+    const void *label_context = data;
 
-    for (i = 0; i < 2; i++) {
-        found_output_ptrs[i] = &data->found_outputs[i];
-        tx_output_ptrs[i] = &data->tx_outputs[i];
-        tx_input_ptrs[i] = &data->tx_inputs[i];
+    if (!has_matches) {
+        /* modify scan key to avoid matches */
+        data->scan_key[31] ^= 0x01;
     }
+    CHECK(data->num_outputs <= SP_BENCH_MAX_OUTPUTS);
+
     for (i = 0; i < iters; i++) {
-        CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(data->ctx,
-            &prevouts_summary,
-            data->smallest_outpoint,
-            tx_input_ptrs, 2,
-            NULL, 0
-        ));
+        CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(data->ctx, &prevouts_summary,
+            data->smallest_outpoint, data->tx_inputs_ptrs, SP_BENCH_MAX_INPUTS, NULL, 0));
         CHECK(secp256k1_silentpayments_recipient_scan_outputs(data->ctx,
-            found_output_ptrs, &n_found,
-            tx_output_ptrs, 2,
-            data->scan_key,
-            &prevouts_summary,
-            &data->spend_pubkeys[0],
+            data->found_outputs_ptrs, &n_found,
+            (const secp256k1_xonly_pubkey**)data->tx_outputs_ptrs, data->num_outputs,
+            data->scan_key, &prevouts_summary, &data->spend_pubkey,
             label_lookup_fn, label_context)
         );
-        CHECK(n_found == 0);
+        CHECK(n_found == (uint32_t)(has_matches ? data->max_k : 0));
     }
 }
 
-static void bench_silentpayments_full_scan(void *arg, int iters) {
-    bench_silentpayments_full_tx_scan(arg, iters, 0);
+static void bench_silentpayments_scan_nomatch(void *arg, int iters) {
+    bench_silentpayments_scan(arg, iters, 0);
 }
 
-static void bench_silentpayments_full_scan_with_labels(void *arg, int iters) {
-    bench_silentpayments_full_tx_scan(arg, iters, 1);
+static void bench_silentpayments_scan_match(void *arg, int iters) {
+    bench_silentpayments_scan(arg, iters, 1);
 }
 
 static void run_silentpayments_bench(int iters, int argc, char** argv) {
     bench_silentpayments_data data;
     int d = argc == 1;
 
+    (void)iters;
     data.ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
-    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan")) run_benchmark("silentpayments_full_scan", bench_silentpayments_full_scan, bench_silentpayments_scan_setup, NULL, &data, 10, iters);
-    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_full_scan_with_labels")) run_benchmark("silentpayments_full_scan_with_labels", bench_silentpayments_full_scan_with_labels, bench_silentpayments_scan_setup, NULL, &data, 10, iters);
+    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_scan_nomatch")) {
+        const int num_outputs_bench[] = {2, 5, 10, 100, 1000, MAX_P2TR_OUTPUTS_PER_BLOCK/10, MAX_P2TR_OUTPUTS_PER_BLOCK};
+        size_t o;
+        for (o = 0; o < sizeof(num_outputs_bench)/sizeof(num_outputs_bench[0]); o++) {
+            const int num_outputs = num_outputs_bench[o];
+            char str[64];
+            data.max_k = 1; /* set dummy value, not relevant for "no match" case */
+            data.num_outputs = num_outputs;
+            sprintf(str, "silentpayments_scan_nomatch_N=%i", num_outputs);
+            run_benchmark(str, bench_silentpayments_scan_nomatch, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 1, 10);
+        }
+    }
+
+    if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_scan_worstcase")) {
+        size_t k;
+#if SP_ORDERED_K_RULE_ENABLED
+        const int num_max_k_bench[] = {MAX_P2TR_OUTPUTS_PER_BLOCK};
+        printf("[ \"ordered k\" protocol rule ]\n");
+#else
+        const int num_max_k_bench[] = {10, 100, 1000};
+        printf("[ \"limited k\" protocol rule ]\n");
+#endif
+        for (k = 0; k < sizeof(num_max_k_bench)/sizeof(num_max_k_bench[0]); k++) {
+            const int max_k = num_max_k_bench[k];
+            char str[64];
+            data.max_k = max_k;
+            data.num_outputs = MAX_P2TR_OUTPUTS_PER_BLOCK;
+            sprintf(str, "silentpayments_scan_worstcase_K=%i", max_k);
+            run_benchmark(str, bench_silentpayments_scan_match, bench_silentpayments_scan_setup, bench_silentpayments_scan_teardown, &data, 1, 5);
+        }
+    }
 
     secp256k1_context_destroy(data.ctx);
 }

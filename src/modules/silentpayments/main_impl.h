@@ -572,6 +572,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     unsigned char shared_secret[33];
     uint32_t k;
     size_t i, found_idx;
+    size_t j_start = 0;
     int found, combined, valid_scan_key, ret;
 
     /* Sanity check inputs */
@@ -655,8 +656,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
 
         found = 0;
         secp256k1_xonly_pubkey_save(&output_xonly, &output_ge);
-        for (j = 0; j < n_tx_outputs; j++) {
-            if (tx_outputs[j] == NULL) continue; /* skip already-matched outputs */
+        for (j = j_start; j < n_tx_outputs; j++) {
             if (secp256k1_xonly_pubkey_cmp(ctx, &output_xonly, tx_outputs[j]) == 0) {
                 label_tweak = NULL;
                 found = 1;
@@ -706,7 +706,6 @@ int secp256k1_silentpayments_recipient_scan_outputs(
         }
         if (found) {
             found_outputs[k]->output = *tx_outputs[found_idx];
-            tx_outputs[found_idx] = NULL; /* mark this output as matched */
             secp256k1_scalar_get_b32(found_outputs[k]->tweak, &output_tweak_scalar);
             /* Clear the output_tweak_scalar since we no longer need it and leaking this value would
              * break indistinguishability of the transaction. */
@@ -733,6 +732,8 @@ int secp256k1_silentpayments_recipient_scan_outputs(
             }
             /* Reset everything for the next round of scanning. */
             label_tweak = NULL;
+            /* if the "ordered k" protocol rule is enabled, we can simply continue with the next tx output */
+            j_start = SP_ORDERED_K_RULE_ENABLED ? (found_idx + 1) : 0;
         } else {
             secp256k1_scalar_clear(&output_tweak_scalar);
             break;
