@@ -130,8 +130,8 @@ static void bench_silentpayments_scan_setup(void* arg) {
         for (i = 0; i < data->max_k / 2; i++) {
             int pos = index_first_k + i;
             secp256k1_xonly_pubkey *tmp = data->tx_outputs_ptrs[pos];
-            data->tx_outputs_ptrs[pos] = data->tx_outputs_ptrs[data->num_outputs - pos - 1];
-            data->tx_outputs_ptrs[data->num_outputs - pos - 1] = tmp;
+            data->tx_outputs_ptrs[pos] = data->tx_outputs_ptrs[data->num_outputs - i - 1];
+            data->tx_outputs_ptrs[data->num_outputs - i - 1] = tmp;
         }
 #endif
 
@@ -211,7 +211,7 @@ static void run_silentpayments_bench(int iters, int argc, char** argv) {
         const int num_max_k_bench[] = {MAX_P2TR_OUTPUTS_PER_BLOCK};
         printf("[ \"ordered k\" protocol rule ]\n");
 #else
-        const int num_max_k_bench[] = {10, 100, 1000};
+        const int num_max_k_bench[] = {100, 200, 500, 1000, 2324};
         printf("[ \"limited k\" protocol rule ]\n");
 #endif
         for (k = 0; k < sizeof(num_max_k_bench)/sizeof(num_max_k_bench[0]); k++) {
