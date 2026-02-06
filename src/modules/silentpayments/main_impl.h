@@ -563,6 +563,28 @@ int secp256k1_silentpayments_recipient_prevouts_summary_create(
     return 1;
 }
 
+
+static uint64_t splitmix64(uint64_t *state) {
+    uint64_t z = (*state += 0x9e3779b97f4a7c15ULL);
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
+}
+
+static void secp256k1_shuffle_tx_outputs(const secp256k1_xonly_pubkey **tx_outputs, size_t n_tx_outputs) {
+    uint64_t rng = 0x4f6c8d93a1b2c3d4ULL;
+    size_t i;
+
+    /* Fisher-Yates shuffle. */
+    for (i = n_tx_outputs; i > 1; i--) {
+        const size_t j = (size_t)(splitmix64(&rng) % i);
+        const size_t a = i - 1;
+        const secp256k1_xonly_pubkey *tmp = tx_outputs[a];
+        tx_outputs[a] = tx_outputs[j];
+        tx_outputs[j] = tmp;
+    }
+}
+
 int secp256k1_silentpayments_recipient_scan_outputs(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs, uint32_t *n_found_outputs,
@@ -628,7 +650,8 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     /* Don't look further than the per-group recipient limit, in order to avoid quadratic scaling issues. */
     k_max = (n_tx_outputs < SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT) ?
              n_tx_outputs : SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT;
-    /* TODO: potential optimization: the worst-case run-time can be cut in half by randomizing the outputs */
+
+    secp256k1_shuffle_tx_outputs((const secp256k1_xonly_pubkey **)tx_outputs, n_tx_outputs);
     for (k = 0; k < k_max; k++) {
         secp256k1_scalar output_tweak_scalar;
         secp256k1_xonly_pubkey output_xonly;

@@ -23,6 +23,7 @@ typedef struct {
     unsigned char scan_key[32];
     secp256k1_xonly_pubkey *tx_outputs;
     secp256k1_xonly_pubkey **tx_outputs_ptrs;
+    secp256k1_xonly_pubkey **tx_outputs_ptrs_orig;
     secp256k1_xonly_pubkey tx_inputs[SP_BENCH_MAX_INPUTS];
     const secp256k1_xonly_pubkey *tx_inputs_ptrs[SP_BENCH_MAX_INPUTS];
     secp256k1_silentpayments_found_output *found_outputs;
@@ -104,6 +105,7 @@ static void bench_silentpayments_scan_setup(void* arg) {
 
         data->tx_outputs = malloc(sizeof(secp256k1_xonly_pubkey) * data->num_outputs);
         data->tx_outputs_ptrs = malloc(sizeof(secp256k1_xonly_pubkey*) * data->num_outputs);
+        data->tx_outputs_ptrs_orig = malloc(sizeof(secp256k1_xonly_pubkey*) * data->num_outputs);
         data->found_outputs = malloc(sizeof(secp256k1_silentpayments_found_output) * data->num_outputs);
         data->found_outputs_ptrs = malloc(sizeof(secp256k1_silentpayments_found_output*) * data->num_outputs);
 
@@ -138,6 +140,11 @@ static void bench_silentpayments_scan_setup(void* arg) {
             data->tx_outputs_ptrs[data->num_outputs - i - 1] = tmp;
         }
 
+        /* save original order of output pointers */
+        for (i = 0; i < data->num_outputs; i++) {
+            data->tx_outputs_ptrs_orig[i] = data->tx_outputs_ptrs[i];
+        }
+
         free(recipients_ptrs);
         free(recipients);
     }
@@ -149,6 +156,7 @@ static void bench_silentpayments_scan_teardown(void* arg, int iters) {
 
     free(data->tx_outputs);
     free(data->tx_outputs_ptrs);
+    free(data->tx_outputs_ptrs_orig);
     free(data->found_outputs);
     free(data->found_outputs_ptrs);
 }
@@ -157,7 +165,7 @@ static void bench_silentpayments_scan(void* arg, int iters) {
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
     uint32_t n_found = 0;
-    int i;
+    int i, j;
     const secp256k1_silentpayments_label_lookup label_lookup_fn = label_lookup;
     const void *label_context = data;
 
@@ -166,6 +174,10 @@ static void bench_silentpayments_scan(void* arg, int iters) {
     for (i = 0; i < iters; i++) {
         CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(data->ctx, &prevouts_summary,
             data->smallest_outpoint, data->tx_inputs_ptrs, SP_BENCH_MAX_INPUTS, NULL, 0));
+        /* restore original order */
+        for (j = 0; j < data->num_outputs; j++) {
+            data->tx_outputs_ptrs[j] = data->tx_outputs_ptrs_orig[j];
+        }
         CHECK(secp256k1_silentpayments_recipient_scan_outputs(data->ctx,
             data->found_outputs_ptrs, &n_found,
             (const secp256k1_xonly_pubkey**)data->tx_outputs_ptrs, data->num_outputs,
