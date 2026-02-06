@@ -197,7 +197,7 @@ static void run_silentpayments_bench(int iters, int argc, char** argv) {
 
     if (d || have_flag(argc, argv, "silentpayments") || have_flag(argc, argv, "silentpayments_scan_worstcase")) {
         size_t k;
-        const int num_matches_bench[] = {10, 100, 1000};
+        const int num_matches_bench[] = {100, 1000, MAX_P2TR_OUTPUTS_PER_BLOCK/10};
         for (k = 0; k < sizeof(num_matches_bench)/sizeof(num_matches_bench[0]); k++) {
             const int num_matches = num_matches_bench[k];
             char str[64];

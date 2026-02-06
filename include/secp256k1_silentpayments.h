@@ -29,7 +29,7 @@ extern "C" {
 
 /* Maximum number of Silent Payments recipients per group (i.e.
  * recipients sharing the same scan public key) as per BIP-352 */
-#define SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT 1000
+#define SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT 1000000 /* uncap just for worst-case benchmarking purposes */
 
 /** The data from a single recipient address
  *
