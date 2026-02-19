@@ -681,7 +681,7 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
     int match, ret;
     uint32_t n_found = 0;
     unsigned char found_output[32];
-    unsigned char found_signatures[10][64];
+    unsigned char found_signatures[MAX_OUTPUTS_PER_TEST_CASE][64];
     secp256k1_silentpayments_prevouts_summary prevouts_summary;
 
 
