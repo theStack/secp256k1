@@ -181,7 +181,15 @@ static SECP256K1_INLINE void *checked_malloc(const secp256k1_callback* cb, size_
 
 #define ROUND_TO_ALIGN(size) (CEIL_DIV(size, ALIGNMENT) * ALIGNMENT)
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#if defined(__GNUC__) && (__STDC_VERSION__ >= 201112L)
+# define __BUILD_BUG_ON_ZERO_MSG(e, msg) ((int)sizeof(struct {_Static_assert(!(e), msg);}))
+# define __same_type(a, b) __builtin_types_compatible_p(__typeof__(a), __typeof__(b))
+# define __is_array(a) (!__same_type((a), &(a)[0]))
+# define __must_be_array(a) __BUILD_BUG_ON_ZERO_MSG(!__is_array(a), "must be array")
+# define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + __must_be_array(arr))
+#else
+# define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
 
 /* Macro for restrict, when available and not in a VERIFY build. */
 #if defined(SECP256K1_BUILD) && defined(VERIFY)
