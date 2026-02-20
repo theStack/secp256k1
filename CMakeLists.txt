@@ -28,7 +28,7 @@ set(${PROJECT_NAME}_LIB_VERSION_AGE 0)
 #=============================
 # Language setup
 #=============================
-set(CMAKE_C_STANDARD 90)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS OFF)
 
 #=============================
