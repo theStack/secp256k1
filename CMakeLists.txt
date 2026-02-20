@@ -212,15 +212,12 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
   try_append_c_flags(/wd4267) # Disable warning C4267 "'var' : conversion from 'size_t' to 'type', possible loss of data".
 else()
   # Keep the following commands ordered lexicographically.
-  try_append_c_flags(-pedantic)
   try_append_c_flags(-Wcast-align) # GCC >= 2.95.
   try_append_c_flags(-Wcast-align=strict) # GCC >= 8.0.
   try_append_c_flags(-Wconditional-uninitialized) # Clang >= 3.0 only.
   try_append_c_flags(-Wextra) # GCC >= 3.4, this is the newer name of -W, which we don't use because older GCCs will warn about unused functions.
   try_append_c_flags(-Wleading-whitespace=spaces) # GCC >= 15.0
   try_append_c_flags(-Wnested-externs)
-  try_append_c_flags(-Wno-long-long) # GCC >= 3.0, -Wlong-long is implied by -pedantic.
-  try_append_c_flags(-Wno-overlength-strings) # GCC >= 4.2, -Woverlength-strings is implied by -pedantic.
   try_append_c_flags(-Wno-unused-function) # GCC >= 3.0, -Wunused-function is implied by -Wall.
   try_append_c_flags(-Wreserved-identifier) # Clang >= 13.0 only.
   try_append_c_flags(-Wshadow)
