@@ -15,6 +15,7 @@ import sys
 NUMS_H = bytes.fromhex("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0")
 MAX_INPUTS_PER_TEST_CASE = 3
 MAX_OUTPUTS_PER_TEST_CASE = 1001
+MAX_LABELS_PER_TEST_CASE = 3
 MAX_PERMUTATIONS_PER_SENDING_TEST_CASE = 12
 
 def sha256(s):
@@ -90,21 +91,26 @@ def gen_key_material(keys, comment=None, prepend_count=False):
 
 def gen_recipient_addr_material(recipients):
     assert len(recipients) <= MAX_OUTPUTS_PER_TEST_CASE
+    empty_count = 0
     out = f"        {len(recipients)},\n"
     out += "        { /* recipient pubkeys (address data) */\n"
     for i in range(MAX_OUTPUTS_PER_TEST_CASE):
-        out += "            {\n"
         if i < len(recipients):
             # Use the scan_pubkey and spend_pubkey directly from the recipient
             scan_pubkey = bytes.fromhex(recipients[i]['scan_pub_key'])
             spend_pubkey = bytes.fromhex(recipients[i]['spend_pub_key'])
-
+            out += "            {\n"
             out += f"                {gen_byte_array(scan_pubkey.hex())},\n"
             out += f"                {gen_byte_array(spend_pubkey.hex())},\n"
+            out += "            },\n"
         else:
-            out += '                "",\n'
-            out += '                "",\n'
-        out += "            },\n"
+            # pack multiple empty entries on the same line to save space
+            if (empty_count % 24) == 0:
+                out += '            '  # line start
+            out += '{"",""},'
+            empty_count += 1
+            if ((empty_count % 24) == 0) or (i == MAX_OUTPUTS_PER_TEST_CASE-1):
+                out += "\n"  # line end
     out += "        },\n"
     return out
 
@@ -136,10 +142,10 @@ def gen_outputs(outputs, comment=None, prepend_count=False, indent=8):
     return out
 
 def gen_labels(labels):
-    assert len(labels) <= MAX_OUTPUTS_PER_TEST_CASE
+    assert len(labels) <= MAX_LABELS_PER_TEST_CASE
     out = "        /* labels */\n"
     out += f"        {len(labels)}, {{"
-    for i in range(MAX_OUTPUTS_PER_TEST_CASE):
+    for i in range(MAX_LABELS_PER_TEST_CASE):
         if i < len(labels):
             out += f"{labels[i]}, "
         else:
@@ -154,6 +160,7 @@ def gen_preamble(test_vectors):
 
 #define MAX_INPUTS_PER_TEST_CASE  {MAX_INPUTS_PER_TEST_CASE}
 #define MAX_OUTPUTS_PER_TEST_CASE {MAX_OUTPUTS_PER_TEST_CASE}
+#define MAX_LABELS_PER_TEST_CASE  {MAX_LABELS_PER_TEST_CASE}
 #define MAX_PERMUTATIONS_PER_SENDING_TEST_CASE {MAX_PERMUTATIONS_PER_SENDING_TEST_CASE}
 
 struct bip352_recipient_addressdata {{
@@ -186,7 +193,7 @@ struct bip352_test_vector {{
     size_t num_to_scan_outputs;
     unsigned char to_scan_outputs[MAX_OUTPUTS_PER_TEST_CASE][32];
     size_t num_labels;
-    unsigned int label_integers[MAX_OUTPUTS_PER_TEST_CASE];
+    unsigned int label_integers[MAX_LABELS_PER_TEST_CASE];
 
     /* Expected recipient data */
     size_t num_found_output_pubkeys;
