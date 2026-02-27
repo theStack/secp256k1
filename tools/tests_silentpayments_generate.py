@@ -14,7 +14,9 @@ import sys
 
 NUMS_H = bytes.fromhex("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0")
 MAX_INPUTS_PER_TEST_CASE = 3
-MAX_OUTPUTS_PER_TEST_CASE = 4
+MAX_OUTPUTS_PER_TEST_CASE = 2325
+MAX_RECIPIENT_ENTRIES_PER_TEST_CASE = 4
+MAX_LABELS_PER_TEST_CASE = 4
 MAX_PERMUTATIONS_PER_SENDING_TEST_CASE = 12
 
 def sha256(s):
@@ -89,10 +91,13 @@ def gen_key_material(keys, comment=None, prepend_count=False):
     return out
 
 def gen_recipient_addr_material(recipients):
-    assert len(recipients) <= MAX_OUTPUTS_PER_TEST_CASE
-    out = f"        {len(recipients)},\n"
-    out += "        { /* recipient pubkeys (address data) */\n"
-    for i in range(MAX_OUTPUTS_PER_TEST_CASE):
+    assert len(recipients) <= MAX_RECIPIENT_ENTRIES_PER_TEST_CASE
+    num_outputs = sum([r.get('count', 1) for r in recipients])
+    assert num_outputs <= MAX_OUTPUTS_PER_TEST_CASE
+    out  = f"        {num_outputs},\n"
+    out += f"        {len(recipients)},\n"
+    out += "        { /* recipient pubkey entries (address data) */\n"
+    for i in range(MAX_RECIPIENT_ENTRIES_PER_TEST_CASE):
         out += "            {\n"
         if i < len(recipients):
             # Use the scan_pubkey and spend_pubkey directly from the recipient
@@ -101,9 +106,11 @@ def gen_recipient_addr_material(recipients):
 
             out += f"                {gen_byte_array(scan_pubkey.hex())},\n"
             out += f"                {gen_byte_array(spend_pubkey.hex())},\n"
+            out += f"                {recipients[i].get('count', 1)},\n"
         else:
             out += '                "",\n'
             out += '                "",\n'
+            out += '                0,\n'
         out += "            },\n"
     out += "        },\n"
     return out
@@ -136,10 +143,10 @@ def gen_outputs(outputs, comment=None, prepend_count=False, indent=8):
     return out
 
 def gen_labels(labels):
-    assert len(labels) <= MAX_OUTPUTS_PER_TEST_CASE
+    assert len(labels) <= MAX_LABELS_PER_TEST_CASE
     out = "        /* labels */\n"
     out += f"        {len(labels)}, {{"
-    for i in range(MAX_OUTPUTS_PER_TEST_CASE):
+    for i in range(MAX_LABELS_PER_TEST_CASE):
         if i < len(labels):
             out += f"{labels[i]}, "
         else:
@@ -154,11 +161,14 @@ def gen_preamble(test_vectors):
 
 #define MAX_INPUTS_PER_TEST_CASE  {MAX_INPUTS_PER_TEST_CASE}
 #define MAX_OUTPUTS_PER_TEST_CASE {MAX_OUTPUTS_PER_TEST_CASE}
+#define MAX_RECIPIENT_ENTRIES_PER_TEST_CASE {MAX_RECIPIENT_ENTRIES_PER_TEST_CASE}
+#define MAX_LABELS_PER_TEST_CASE  {MAX_LABELS_PER_TEST_CASE}
 #define MAX_PERMUTATIONS_PER_SENDING_TEST_CASE {MAX_PERMUTATIONS_PER_SENDING_TEST_CASE}
 
 struct bip352_recipient_addressdata {{
     unsigned char scan_pubkey[33];
     unsigned char spend_pubkey[33];
+    size_t count;
 }};
 
 struct bip352_test_vector {{
@@ -173,7 +183,8 @@ struct bip352_test_vector {{
 
     /* Given sender data (pubkeys encoded per output address to send to) */
     size_t num_outputs;
-    struct bip352_recipient_addressdata recipient_pubkeys[MAX_OUTPUTS_PER_TEST_CASE];
+    size_t num_recipient_entries;
+    struct bip352_recipient_addressdata recipient_pubkeys[MAX_RECIPIENT_ENTRIES_PER_TEST_CASE];
 
     /* Expected sender data */
     size_t num_output_sets;
@@ -186,9 +197,10 @@ struct bip352_test_vector {{
     size_t num_to_scan_outputs;
     unsigned char to_scan_outputs[MAX_OUTPUTS_PER_TEST_CASE][32];
     size_t num_labels;
-    unsigned int label_integers[MAX_OUTPUTS_PER_TEST_CASE];
+    unsigned int label_integers[MAX_LABELS_PER_TEST_CASE];
 
     /* Expected recipient data */
+    size_t full_check; /* 1..detailed check against tweaks and signatures, 0..only check found outputs count */
     size_t num_found_output_pubkeys;
     unsigned char found_output_pubkeys[MAX_OUTPUTS_PER_TEST_CASE][32];
     unsigned char found_seckey_tweaks[MAX_OUTPUTS_PER_TEST_CASE][32];
@@ -252,11 +264,21 @@ def gen_test_vectors(test_vectors):
         # emit recipient to-scan outputs, labels and expected-found outputs
         out += gen_outputs(recv_test_given['outputs'], "outputs to scan", prepend_count=True)
         out += gen_labels(recv_test_given['labels'])
-        expected_pubkeys = [o['pub_key'] for o in recv_test_expected['outputs']]
-        expected_tweaks = [o['priv_key_tweak'] for o in recv_test_expected['outputs']]
-        expected_signatures = [o['signature'] for o in recv_test_expected['outputs']]
-        out += "        /* expected output data (pubkeys and seckey tweaks) */\n"
-        out += gen_outputs(expected_pubkeys, prepend_count=True)
+        full_check = 'outputs' in recv_test_expected
+        out += f"        {int(full_check)}, /* full check? */\n"
+        if full_check:
+            expected_pubkeys = [o['pub_key'] for o in recv_test_expected['outputs']]
+            expected_tweaks = [o['priv_key_tweak'] for o in recv_test_expected['outputs']]
+            expected_signatures = [o['signature'] for o in recv_test_expected['outputs']]
+            out += "        /* expected output data (pubkeys and seckey tweaks) */\n"
+        else:
+            expected_pubkeys = []
+            expected_tweaks = []
+            expected_signatures = []
+            out += "        /* expected number of outputs */\n"
+            out += f"        {recv_test_expected['n_outputs']},\n"
+
+        out += gen_outputs(expected_pubkeys, prepend_count=full_check)
         out += gen_outputs(expected_tweaks)
         out += gen_outputs(expected_signatures)
         out += "    },\n\n"

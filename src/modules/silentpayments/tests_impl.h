@@ -607,13 +607,22 @@ void run_silentpayments_test_vector_send(const struct bip352_test_vector *test) 
     int match, ret;
 
     /* Check that sender creates expected outputs */
-    for (i = 0; i < test->num_outputs; i++) {
-        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].scan_pubkey, test->recipient_pubkeys[i].scan_pubkey, 33));
-        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].spend_pubkey, test->recipient_pubkeys[i].spend_pubkey, 33));
-        recipients[i].index = i;
-        recipient_ptrs[i] = &recipients[i];
-        generated_output_ptrs[i] = &generated_outputs[i];
+    j = 0; /* index to expand given recipient entries (with possible repeated entries) to full list */
+    for (i = 0; i < test->num_recipient_entries; i++) {
+        size_t c;
+        secp256k1_pubkey scan_pubkey, spend_pubkey;
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &scan_pubkey, test->recipient_pubkeys[i].scan_pubkey, 33));
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &spend_pubkey, test->recipient_pubkeys[i].spend_pubkey, 33));
+        for (c = 0; c < test->recipient_pubkeys[i].count; c++) {
+            recipients[j].scan_pubkey = scan_pubkey;
+            recipients[j].spend_pubkey = spend_pubkey;
+            recipients[j].index = j;
+            recipient_ptrs[j] = &recipients[j];
+            generated_output_ptrs[j] = &generated_outputs[j];
+            j++;
+        }
     }
+    CHECK(j == test->num_outputs);
     for (i = 0; i < test->num_plain_inputs; i++) {
         plain_seckeys[i] = test->plain_seckeys[i];
     }
@@ -636,11 +645,10 @@ void run_silentpayments_test_vector_send(const struct bip352_test_vector *test) 
         /* We expect exactly one ARG_CHECK if the number of input keys was 0. */
         CHECK(ecount == ((test->num_taproot_inputs + test->num_plain_inputs) == 0));
     }
-    /* If we are unable to create outputs, e.g., the input keys sum to zero, check that the
-     * expected number of recipient outputs for this test case is zero
-     */
-    if (!ret) {
-        CHECK(test->num_recipient_outputs == 0);
+    /* If the expected number of recipient outputs is zero, check that the creation of outputs
+     * failed (e.g. due to input keys summing to zero) */
+    if (test->num_recipient_outputs == 0) {
+        CHECK(!ret);
         return;
     }
 
@@ -678,7 +686,7 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
     secp256k1_pubkey recipient_spend_pubkey;
     secp256k1_silentpayments_label label;
     size_t i,j;
-    int match, ret;
+    int ret;
     uint32_t n_found = 0;
     unsigned char found_output[32];
     unsigned char found_signatures[MAX_OUTPUTS_PER_TEST_CASE][64];
@@ -741,30 +749,32 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
         &recipient_spend_pubkey,
         label_lookup, &labels_cache)
     );
-    for (i = 0; i < n_found; i++) {
-        unsigned char full_seckey[32];
-        secp256k1_keypair keypair;
-        unsigned char signature[64];
-        memcpy(&full_seckey, test->spend_seckey, 32);
-        CHECK(secp256k1_ec_seckey_tweak_add(CTX, full_seckey, found_outputs[i]->tweak));
-        CHECK(secp256k1_keypair_create(CTX, &keypair, full_seckey));
-        CHECK(secp256k1_schnorrsig_sign32(CTX, signature, MSG32, &keypair, AUX32));
-        memcpy(found_signatures[i], signature, 64);
-    }
-
-    /* compare expected and scanned outputs (including calculated seckey tweaks and signatures) */
-    match = 0;
-    for (i = 0; i < n_found; i++) {
-        CHECK(secp256k1_xonly_pubkey_serialize(CTX, found_output, &found_outputs[i]->output));
-        for (j = 0; j < test->num_found_output_pubkeys; j++) {
-            if (secp256k1_memcmp_var(&found_output, test->found_output_pubkeys[j], 32) == 0) {
-                CHECK(secp256k1_memcmp_var(found_outputs[i]->tweak, test->found_seckey_tweaks[j], 32) == 0);
-                CHECK(secp256k1_memcmp_var(found_signatures[i], test->found_signatures[j], 64) == 0);
-                match = 1;
-                break;
-            }
+    if (test->full_check) {
+        /* compare expected and scanned outputs (including calculated seckey tweaks and signatures) */
+        for (i = 0; i < n_found; i++) {
+            unsigned char full_seckey[32];
+            secp256k1_keypair keypair;
+            unsigned char signature[64];
+            memcpy(&full_seckey, test->spend_seckey, 32);
+            CHECK(secp256k1_ec_seckey_tweak_add(CTX, full_seckey, found_outputs[i]->tweak));
+            CHECK(secp256k1_keypair_create(CTX, &keypair, full_seckey));
+            CHECK(secp256k1_schnorrsig_sign32(CTX, signature, MSG32, &keypair, AUX32));
+            memcpy(found_signatures[i], signature, 64);
         }
-        CHECK(match);
+
+        for (i = 0; i < n_found; i++) {
+            int match = 0;
+            CHECK(secp256k1_xonly_pubkey_serialize(CTX, found_output, &found_outputs[i]->output));
+            for (j = 0; j < test->num_found_output_pubkeys; j++) {
+                if (secp256k1_memcmp_var(&found_output, test->found_output_pubkeys[j], 32) == 0) {
+                    CHECK(secp256k1_memcmp_var(found_outputs[i]->tweak, test->found_seckey_tweaks[j], 32) == 0);
+                    CHECK(secp256k1_memcmp_var(found_signatures[i], test->found_signatures[j], 64) == 0);
+                    match = 1;
+                    break;
+                }
+            }
+            CHECK(match);
+        }
     }
     CHECK(n_found == test->num_found_output_pubkeys);
 }
