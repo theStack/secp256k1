@@ -16,6 +16,8 @@
 
 static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx) {
     secp256k1_ecmult_gen_blind(ctx, hash_ctx, NULL);
+    ctx->var_prec_table = NULL;
+    ctx->var_prec_bits = 0;
     ctx->built = 1;
 }
 
@@ -28,6 +30,11 @@ static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context *ctx
     secp256k1_scalar_clear(&ctx->scalar_offset);
     secp256k1_ge_clear(&ctx->ge_offset);
     secp256k1_fe_clear(&ctx->proj_blind);
+    if (ctx->var_prec_table != NULL) { /* TODO: right place? */
+        free(ctx->var_prec_table);
+        ctx->var_prec_table = NULL;
+        ctx->var_prec_bits = 0;
+    }
 }
 
 /* Compute the scalar (2^COMB_BITS - 1) / 2, the difference between the gn argument to
@@ -279,6 +286,22 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
     secp256k1_ge_clear(&add);
     secp256k1_memclear_explicit(&adds, sizeof(adds));
     secp256k1_memclear_explicit(&recoded, sizeof(recoded));
+}
+
+static void secp256k1_ecmult_gen_var(const secp256k1_ecmult_gen_context* ctx, secp256k1_gej *r, const secp256k1_scalar *a) {
+    VERIFY_CHECK(ctx->var_prec_table != NULL);
+    {
+        int bits = ctx->var_prec_bits;
+        int g = 1 << bits;
+        int n = 256 / bits;
+        int i, n_i;
+
+        secp256k1_gej_set_infinity(r);
+        for (i = 0; i < n; i++) {
+            n_i = secp256k1_scalar_get_bits_var(a, i * bits, bits);
+            secp256k1_gej_add_ge_var(r, r, &ctx->var_prec_table[i * g + n_i], NULL);
+        }
+    }
 }
 
 /* Setup blinding values for secp256k1_ecmult_gen. */

@@ -108,6 +108,15 @@ static void bench_ecmult_gen(void* arg, int iters) {
     }
 }
 
+static void bench_ecmult_gen_var(void* arg, int iters) {
+    bench_data* data = (bench_data*)arg;
+    int i;
+
+    for (i = 0; i < iters; ++i) {
+        secp256k1_ecmult_gen_var(&data->ctx->ecmult_gen_ctx, &data->output[i], &data->scalars[(data->offset1+i) % POINTS]);
+    }
+}
+
 static void bench_ecmult_gen_teardown(void* arg, int iters) {
     bench_data* data = (bench_data*)arg;
     bench_ecmult_teardown_helper(data, NULL, NULL, &data->offset1, iters);
@@ -199,6 +208,8 @@ static void run_ecmult_bench(bench_data* data, int iters) {
     char str[32];
     sprintf(str, "ecmult_gen");
     run_benchmark(str, bench_ecmult_gen, bench_ecmult_setup, bench_ecmult_gen_teardown, data, 10, iters);
+    sprintf(str, "ecmult_gen_var");
+    run_benchmark(str, bench_ecmult_gen_var, bench_ecmult_setup, bench_ecmult_gen_teardown, data, 10, iters);
     sprintf(str, "ecmult_const");
     run_benchmark(str, bench_ecmult_const, bench_ecmult_setup, bench_ecmult_const_teardown, data, 10, iters);
     sprintf(str, "ecmult_const_xonly");
@@ -342,6 +353,7 @@ int main(int argc, char **argv) {
     }
 
     data.ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    CHECK(secp256k1_context_prepare_ecmult_gen_var(data.ctx, 8));
     scratch_size = secp256k1_strauss_scratch_size(POINTS) + STRAUSS_SCRATCH_OBJECTS*ALIGNMENT;
     if (!have_flag(argc, argv, "simple")) {
         data.scratch = secp256k1_scratch_space_create(data.ctx, scratch_size);

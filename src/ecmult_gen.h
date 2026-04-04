@@ -131,6 +131,10 @@ typedef struct {
     /* Factor used for projective blinding. This value is used to rescale the Z
      * coordinate of the first table lookup. */
     secp256k1_fe proj_blind;
+
+    /* Lookup table for variable-time generator point multiplication (optionally generated at run-time) */
+    secp256k1_ge* var_prec_table;
+    int var_prec_bits;
 } secp256k1_ecmult_gen_context;
 
 static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context* ctx, const secp256k1_hash_ctx *hash_ctx);
@@ -138,6 +142,7 @@ static void secp256k1_ecmult_gen_context_clear(secp256k1_ecmult_gen_context* ctx
 
 /** Multiply with the generator: R = a*G */
 static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context* ctx, secp256k1_gej *r, const secp256k1_scalar *a);
+static void secp256k1_ecmult_gen_var(const secp256k1_ecmult_gen_context* ctx, secp256k1_gej *r, const secp256k1_scalar *a);
 
 static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32);
 

@@ -922,6 +922,17 @@ SECP256K1_API int secp256k1_tagged_sha256(
     size_t msglen
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(5);
 
+/** Prepare fast variable-time generator point multiplication.
+ *
+ *  Returns: 1 always.
+ *  Args:   ctx: pointer to a context object
+ *  In:    bits: precision bits for the precomputed table, must be 2, 4, 8 or 16
+ */
+SECP256K1_API int secp256k1_context_prepare_ecmult_gen_var(
+    secp256k1_context *ctx,
+    int bits
+) SECP256K1_ARG_NONNULL(1);
+
 #ifdef __cplusplus
 }
 #endif

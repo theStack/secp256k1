@@ -30,6 +30,7 @@
 #include "ecmult_impl.h"
 #include "ecmult_const_impl.h"
 #include "ecmult_gen_impl.h"
+#include "ecmult_gen_compute_table_impl.h"
 #include "ecdsa_impl.h"
 #include "eckey_impl.h"
 #include "hash_impl.h"
@@ -826,6 +827,15 @@ int secp256k1_tagged_sha256(const secp256k1_context* ctx, unsigned char *hash32,
     secp256k1_sha256_write(secp256k1_get_hash_context(ctx), &sha, msg, msglen);
     secp256k1_sha256_finalize(secp256k1_get_hash_context(ctx), &sha, hash32);
     secp256k1_sha256_clear(&sha);
+    return 1;
+}
+
+int secp256k1_context_prepare_ecmult_gen_var(secp256k1_context *ctx, int prec_bits) {
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(prec_bits == 2 || prec_bits == 4 || prec_bits == 8 || prec_bits == 16);
+
+    secp256k1_ecmult_gen_var_compute_table(&ctx->ecmult_gen_ctx.var_prec_table, &secp256k1_ge_const_g, prec_bits);
+    ctx->ecmult_gen_ctx.var_prec_bits = prec_bits;
     return 1;
 }
 

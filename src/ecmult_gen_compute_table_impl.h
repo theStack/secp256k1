@@ -105,4 +105,27 @@ static void secp256k1_ecmult_gen_compute_table(secp256k1_ge_storage* table, cons
     free(prec);
 }
 
+static void secp256k1_ecmult_gen_var_compute_table(secp256k1_ge** table, const secp256k1_ge* gen, int prec_bits) {
+    int g = 1 << prec_bits;
+    int n = 256 / prec_bits;
+    int i, j;
+    secp256k1_gej gbase;
+    secp256k1_ge* prec = checked_malloc(&default_error_callback, n * g * sizeof(*prec));
+    secp256k1_gej* precj = checked_malloc(&default_error_callback, n * g * sizeof(*precj));
+    secp256k1_gej_set_ge(&gbase, gen);
+
+    for (j = 0; j < n; j++) {
+        secp256k1_gej_set_infinity(&precj[j*g]);
+        for (i = 1; i < g; i++) {
+            secp256k1_gej_add_var(&precj[j*g + i], &precj[j*g + i - 1], &gbase, NULL);
+        }
+        for (i = 0; i < prec_bits; i++) {
+            secp256k1_gej_double_var(&gbase, &gbase, NULL);
+        }
+    }
+    secp256k1_ge_set_all_gej_var(prec, precj, n * g);
+    free(precj);
+    *table = prec;
+}
+
 #endif /* SECP256K1_ECMULT_GEN_COMPUTE_TABLE_IMPL_H */
