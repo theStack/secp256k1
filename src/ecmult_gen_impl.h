@@ -14,6 +14,30 @@
 #include "hash_impl.h"
 #include "precomputed_ecmult_gen.h"
 
+/* TODO: actually calculate these at compile-time with the precompute_ecmult_gen binary, if possible */
+static const secp256k1_scalar gen_scalar_diff =
+#if (COMB_BLOCKS == 2) && (COMB_TEETH == 5) && (COMB_SPACING == 26)
+    SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x00000009,0x87e0873d,0xdd5f4e3f,0xe1563adf,0xe6691698)
+#elif (COMB_BLOCKS == 11) && (COMB_TEETH == 6) && (COMB_SPACING == 4)
+    SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x000000a2,0x05e8fb1b,0xb354323d,0xf6b9e8de,0x4cfa8020)
+#elif (COMB_BLOCKS == 43) && (COMB_TEETH == 6) && (COMB_SPACING == 1)
+    SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x00000001,0xe7f9b4a5,0xf9130fa6,0x6044722c,0xc7ae9e1e)
+#else
+#  if !defined(EXHAUSTIVE_TEST_ORDER)
+#    error "Configuration mismatch, invalid COMB_* parameters."
+#  endif
+#  if EXHAUSTIVE_TEST_ORDER == 7
+       SECP256K1_SCALAR_CONST(0,0,0,0,0,0,0,4)
+#  elif EXHAUSTIVE_TEST_ORDER == 13
+       SECP256K1_SCALAR_CONST(0,0,0,0,0,0,0,1)
+#  elif EXHAUSTIVE_TEST_ORDER == 199
+       SECP256K1_SCALAR_CONST(0,0,0,0,0,0,0,0x9d)
+#  else
+#    error "Unknown exhaustive test order"
+#  endif
+#endif
+;
+
 static void secp256k1_ecmult_gen_context_build(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx) {
     secp256k1_ecmult_gen_blind(ctx, hash_ctx, NULL);
     ctx->built = 1;
@@ -279,6 +303,73 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
     secp256k1_ge_clear(&add);
     secp256k1_memclear_explicit(&adds, sizeof(adds));
     secp256k1_memclear_explicit(&recoded, sizeof(recoded));
+}
+
+/* Variable-time variant for generator point multiplication.
+ *
+ * This is essentially a copy of `secp256k1_ecmult_gen`, but with all side-channel
+ * mitigations (i.e., constant-time code, random scalar blinding, and memory clearing)
+ * removed. The EC point operation calls (addition, doubling) are replaced with their
+ * faster variable-time equivalents. This function is stateless and does not require
+ * a context parameter, enabling its use in internal functions (e.g., `eckey_pubkey_tweak_add`).
+ *
+ * Note that the branch for the first table lookup assignment is also removed: since
+ * the result is initialized to the point at infinity, adding to it with `_gej_add_ge_var`
+ * is equivalent to a simple copy. */
+static void secp256k1_ecmult_gen_var(secp256k1_gej *r, const secp256k1_scalar *gn) {
+    uint32_t comb_off;
+    secp256k1_ge add;
+    secp256k1_scalar d;
+    uint32_t recoded[(COMB_BITS + 31) >> 5] = {0};
+    int i;
+
+    /* Adjust input scalar for difference and convert to recoded array. */
+    secp256k1_scalar_add(&d, &gen_scalar_diff, gn);
+    for (i = 0; i < 8 && i < ((COMB_BITS + 31) >> 5); ++i) {
+        recoded[i] = secp256k1_scalar_get_bits_limb32(&d, 32 * i, 32);
+    }
+
+    /* Outer loop: iterate over comb_off from COMB_SPACING - 1 down to 0. */
+    secp256k1_gej_set_infinity(r);
+    comb_off = COMB_SPACING - 1;
+    while (1) {
+        uint32_t block;
+        uint32_t bit_pos = comb_off;
+        /* Inner loop: for each block, add table entries to the result. */
+        for (block = 0; block < COMB_BLOCKS; ++block) {
+            /* Gather the mask(block)-selected bits of d into bits. They're packed:
+             * bits[tooth] = d[(block*COMB_TEETH + tooth)*COMB_SPACING + comb_off]. */
+            uint32_t bits = 0, sign, abs, tooth;
+            for (tooth = 0; tooth < COMB_TEETH; ++tooth) {
+                uint32_t bitdata = secp256k1_rotr32(recoded[bit_pos >> 5], bit_pos & 0x1f);
+
+                /* Clear the bit at position tooth */
+                bits &= ~(1 << tooth);
+
+                /* Write the bit into position tooth (and junk into higher bits). */
+                bits ^= bitdata << tooth;
+                bit_pos += COMB_SPACING;
+            }
+
+            /* If the top bit of bits is 1, flip them all (corresponding to looking up
+             * the negated table value), and remember to negate the result in sign. */
+            sign = (bits >> (COMB_TEETH - 1)) & 1;
+            abs = (bits ^ -sign) & (COMB_POINTS - 1);
+            VERIFY_CHECK(sign == 0 || sign == 1);
+            VERIFY_CHECK(abs < COMB_POINTS);
+
+            /* Perform lookup, negate if necessary and add to r. */
+            secp256k1_ge_from_storage(&add, &secp256k1_ecmult_gen_prec_table[block][abs]);
+            if (sign) {
+                secp256k1_fe_negate(&add.y, &add.y, 1);
+            }
+            secp256k1_gej_add_ge_var(r, r, &add, NULL);
+        }
+
+        /* Double the result, except in the last iteration. */
+        if (comb_off-- == 0) break;
+        secp256k1_gej_double_var(r, r, NULL);
+    }
 }
 
 /* Setup blinding values for secp256k1_ecmult_gen. */
