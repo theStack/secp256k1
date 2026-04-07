@@ -22,6 +22,10 @@ static const secp256k1_scalar gen_scalar_diff =
     SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x000000a2,0x05e8fb1b,0xb354323d,0xf6b9e8de,0x4cfa8020)
 #elif (COMB_BLOCKS == 43) && (COMB_TEETH == 6) && (COMB_SPACING == 1)
     SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x00000001,0xe7f9b4a5,0xf9130fa6,0x6044722c,0xc7ae9e1e)
+#elif (COMB_BLOCKS == 37) && (COMB_TEETH == 7) && (COMB_SPACING == 1)
+    SECP256K1_SCALAR_CONST(0x80000000,0x00000000,0x00000000,0x00000004,0x729bfad8,0x9a81cf2e,0xe09fb513,0x27421b9c)
+#elif (COMB_BLOCKS == 32) && (COMB_TEETH == 8) && (COMB_SPACING == 1)
+    SECP256K1_SCALAR_CONST(0x00000000,0x00000000,0x00000000,0x00000000,0xa2a8918c,0xa85bafe2,0x2016d0b9,0x97e4df5f)
 #else
 #  if !defined(EXHAUSTIVE_TEST_ORDER)
 #    error "Configuration mismatch, invalid COMB_* parameters."
@@ -324,6 +328,20 @@ static void secp256k1_ecmult_gen_var(secp256k1_gej *r, const secp256k1_scalar *g
     int i;
 
     /* Adjust input scalar for difference and convert to recoded array. */
+#if 0
+    /* code for determining gen_scalar_diff compile-time constant; must be set to secp256k1_scalar_zero to hit branch */
+    if (secp256k1_scalar_is_zero(&gen_scalar_diff)) {
+        unsigned char bin[32]; int j;
+        secp256k1_ecmult_gen_scalar_diff(&gen_scalar_diff);
+        secp256k1_scalar_get_b32(bin, &gen_scalar_diff);
+        printf("SECP256K1_SCALAR_CONST(");
+        for (j = 0; j < 32; j += 4) {
+            printf("0x%02x%02x%02x%02x", bin[j], bin[j+1], bin[j+2], bin[j+3]);
+            if (j != 28) printf(",");
+        }
+        printf(")\n");
+    }
+#endif
     secp256k1_scalar_add(&d, &gen_scalar_diff, gn);
     for (i = 0; i < 8 && i < ((COMB_BITS + 31) >> 5); ++i) {
         recoded[i] = secp256k1_scalar_get_bits_limb32(&d, 32 * i, 32);

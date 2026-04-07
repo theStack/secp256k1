@@ -19,9 +19,11 @@
 #include "ecmult_gen_compute_table_impl.h"
 
 static const int CONFIGS[][2] = {
-    {2, 5},
-    {11, 6},
-    {43, 6}
+    {2, 5},  /* 2 *  (2 ** 4) * 64 = 2 KB */
+    {11, 6}, /* 11 * (2 ** 5) * 64 = 22 KB */
+    {43, 6}, /* 43 * (2 ** 5) * 64 = 86 KB */
+    {37, 7}, /* 37 * (2 ** 6) * 64 = 148 KB */
+    {32, 8}, /* 32 * (2 ** 7) * 64 = 256 KB */
 };
 
 static void print_table(FILE* fp, int blocks, int teeth) {
