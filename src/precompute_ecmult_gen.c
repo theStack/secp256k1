@@ -19,9 +19,18 @@
 #include "ecmult_gen_compute_table_impl.h"
 
 static const int CONFIGS[][2] = {
-    {2, 5},
-    {11, 6},
-    {43, 6}
+    {2, 5},   /* 2 *  (2 ** 4) * 64 = 2 KB */
+    {11, 6},  /* 11 * (2 ** 5) * 64 = 22 KB */
+    {43, 6},  /* 43 * (2 ** 5) * 64 = 86 KB;  42 EC point adds for ecmult_gen_var */
+    {37, 7},  /* 37 * (2 ** 6) * 64 = 148 KB; 36 EC point adds for ecmult_gen_var */
+    {32, 8},  /* 32 * (2 ** 7) * 64 = 256 KB; 31 EC point adds for ecmult_gen_var */
+    {29, 9},  /* 29 * (2 ** 8) * 64 = 464 KB; 28 EC point adds for ecmult_gen_var */
+    {26, 10}, /* 26 * (2 ** 9) * 64 = 832 KB; 25 EC point adds for ecmult_gen_var */
+    {24, 11}, /* 24 * (2 ** 10) * 64 = 1536 KB; 23 EC point adds for ecmult_gen_var */
+    {22, 12}, /* 22 * (2 ** 11) * 64 = 2816 KB; 21 EC point adds for ecmult_gen_var */
+    {20, 13}, /* 20 * (2 ** 12) * 64 = 5120 KB; 19 EC point adds for ecmult_gen_var */
+    {19, 14}, /* 19 * (2 ** 13) * 64 = 9728 KB; 18 EC point adds for ecmult_gen_var */
+    {18, 15}, /* 18 * (2 ** 14) * 64 = 18432 KB; 17 EC point adds for ecmult_gen_var */
 };
 
 static void print_table(FILE* fp, int blocks, int teeth) {

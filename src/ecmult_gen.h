@@ -90,8 +90,8 @@
 #if !(1 <= COMB_BLOCKS && COMB_BLOCKS <= 256)
 #  error "COMB_BLOCKS must be in the range [1, 256]"
 #endif
-#if !(1 <= COMB_TEETH && COMB_TEETH <= 8)
-#  error "COMB_TEETH must be in the range [1, 8]"
+#if !(1 <= COMB_TEETH && COMB_TEETH <= 16)
+#  error "COMB_TEETH must be in the range [1, 16]"
 #endif
 #if COMB_BITS < COMB_RANGE
 #  error "COMB_BLOCKS * COMB_TEETH * COMB_SPACING is too low"
