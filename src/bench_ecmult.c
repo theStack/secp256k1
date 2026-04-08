@@ -322,6 +322,14 @@ int main(int argc, char **argv) {
     int i, p;
     size_t scratch_size;
 
+    /* Disable buffering for stdout to improve reliability of getting
+     * diagnostic information. Happens right at the start of main because
+     * setbuf must be used before any other operation on the stream. */
+    setbuf(stdout, NULL);
+    /* Also disable buffering for stderr because it's not guaranteed that it's
+     * unbuffered on all systems. */
+    setbuf(stderr, NULL);
+
     int default_iters = 10000;
     int iters = get_iters(default_iters);
     if (iters == 0) {
