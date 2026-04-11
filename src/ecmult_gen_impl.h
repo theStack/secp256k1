@@ -260,6 +260,17 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
     secp256k1_memclear_explicit(&recoded, sizeof(recoded));
 }
 
+static void secp256k1_ecmult_gen_var(secp256k1_gej *r, const secp256k1_scalar *a) {
+    /* create "fake" (unblinded) ecmult_gen_context so we can delegate to ecmult_gen without context */
+    secp256k1_ecmult_gen_context gen_ctx;
+    secp256k1_scalar_add(&gen_ctx.scalar_offset, &secp256k1_scalar_one, &secp256k1_ecmult_gen_scalar_diff);
+    secp256k1_ge_neg(&gen_ctx.ge_offset, &secp256k1_ge_const_g);
+    gen_ctx.proj_blind = secp256k1_fe_one;
+    gen_ctx.built = 1;
+
+    secp256k1_ecmult_gen(&gen_ctx, r, a);
+}
+
 /* Setup blinding values for secp256k1_ecmult_gen. */
 static void secp256k1_ecmult_gen_blind(secp256k1_ecmult_gen_context *ctx, const secp256k1_hash_ctx *hash_ctx, const unsigned char *seed32) {
     secp256k1_scalar b;
