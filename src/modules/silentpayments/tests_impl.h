@@ -830,6 +830,10 @@ void run_silentpayments_test_vectors(void) {
     for (i = 0; i < ARRAY_SIZE(bip352_test_vectors); i++) {
         const struct bip352_test_vector *test = &bip352_test_vectors[i];
         run_silentpayments_test_vector_send(test);
+#if defined VALGRIND
+        /* for valgrind builds, skip the long-running K_max limit scanning test, as it times out on CI */
+        if (test->num_found_output_pubkeys == SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT) continue;
+#endif
         run_silentpayments_test_vector_receive(test);
     }
 }
