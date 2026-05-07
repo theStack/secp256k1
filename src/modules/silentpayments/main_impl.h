@@ -85,7 +85,7 @@ static int secp256k1_silentpayments_calculate_input_hash_scalar(const secp256k1_
     return (!secp256k1_scalar_is_zero(input_hash_scalar)) & (!overflow);
 }
 
-static void secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_ge *public_component, const secp256k1_scalar *secret_component) {
+static void secp256k1_silentpayments_create_shared_secret(unsigned char *shared_secret33, const secp256k1_ge *public_component, const secp256k1_scalar *secret_component) {
     secp256k1_gej ss_j;
     secp256k1_ge ss;
 
@@ -94,9 +94,12 @@ static void secp256k1_silentpayments_create_shared_secret(const secp256k1_contex
 
     secp256k1_ecmult_const(&ss_j, public_component, secret_component);
     secp256k1_ge_set_gej(&ss, &ss_j);
-    /* We declassify the shared secret group element because serializing a group element is a non-constant time operation. */
-    secp256k1_declassify(ctx, &ss, sizeof(ss));
-    secp256k1_eckey_pubkey_serialize33(&ss, shared_secret33);
+
+    /* serialize shared secret in constant-time */
+    secp256k1_fe_normalize(&ss.x);
+    secp256k1_fe_normalize(&ss.y);
+    shared_secret33[0] = secp256k1_fe_is_odd(&ss.y) ? SECP256K1_TAG_PUBKEY_ODD : SECP256K1_TAG_PUBKEY_EVEN;
+    secp256k1_fe_get_b32(&shared_secret33[1], &ss.x);
 
     /* Leaking these values would break indistinguishability of the transaction, so clear them. */
     secp256k1_ge_clear(&ss);
@@ -300,7 +303,7 @@ int secp256k1_silentpayments_sender_create_outputs(
             /* Creating the shared secret requires that the public and secret components are
              * non-infinity and non-zero, respectively. Note that the involved parts (input hash,
              * secret key sum, and scan public key) have all been verified at this point. */
-            secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &pk, &seckey_sum_scalar);
+            secp256k1_silentpayments_create_shared_secret(shared_secret, &pk, &seckey_sum_scalar);
             k = 0;
         }
         /* If creating another output for the current recipient group exceeded the
@@ -611,7 +614,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
      * non-infinity and non-zero, respectively. Note that the involved parts (input hash,
      * scan secret key, and prevouts public key sum) have all been verified at this point,
      * assuming that the user hasn't tampered the `prevouts_summary` object manually. */
-    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &prevouts_pubkey_sum_ge, &scan_key_scalar);
+    secp256k1_silentpayments_create_shared_secret(shared_secret, &prevouts_pubkey_sum_ge, &scan_key_scalar);
     /* Clear the scan_key_scalar since we no longer need it and leaking this value would break indistinguishability of the transaction. */
     secp256k1_scalar_clear(&scan_key_scalar);
 
