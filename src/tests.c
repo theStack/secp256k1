@@ -418,7 +418,14 @@ static void run_scratch_tests(void) {
     scratch = &local_scratch;
     CHECK_ERROR(CTX, secp256k1_scratch_max_allocation(&CTX->error_callback, scratch, 0));
     CHECK_ERROR(CTX, secp256k1_scratch_alloc(&CTX->error_callback, scratch, 500));
+#if defined(__GNUC__) && (__GNUC__ >= 17)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
     CHECK_ERROR_VOID(CTX, secp256k1_scratch_space_destroy(CTX, scratch));
+#if defined(__GNUC__) && (__GNUC__ >= 17)
+#  pragma GCC diagnostic pop
+#endif
 
     /* Test that large integers do not wrap around in a bad way */
     scratch = secp256k1_scratch_space_create(CTX, 1000);
