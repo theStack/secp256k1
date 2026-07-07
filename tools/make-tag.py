@@ -15,30 +15,21 @@ import treehash512
 GIT = os.getenv("GIT", "git")
 
 # Full version specification
-VersionSpec = collections.namedtuple('VersionSpec', ['major', 'minor', 'build', 'rc'])
+VersionSpec = collections.namedtuple('VersionSpec', ['major', 'minor', 'patch'])
 
 def version_name(spec):
     '''
     Short version name for comparison.
     '''
-    if not spec.build:
-        version = f"{spec.major}.{spec.minor}"
-    else:
-        version = f"{spec.major}.{spec.minor}.{spec.build}"
-    if spec.rc:
-        version += f"rc{spec.rc}"
-    return version
+    return f"{spec.major}.{spec.minor}.{spec.patch}"
 
 def parse_tag(tag):
     '''
     Parse a version tag. Valid version tags are
 
-    - v1.2
     - v1.2.3
-    - v1.2rc3
-    - v1.2.3rc4
     '''
-    m = re.match(r"^v([0-9]+)\.([0-9]+)(?:\.([0-9]+))?(?:rc([0-9])+)?$", tag)
+    m = re.match(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$", tag)
 
     if m is None:
         print(f"Invalid tag {tag}", file=sys.stderr)
@@ -46,30 +37,18 @@ def parse_tag(tag):
 
     major = m.group(1)
     minor = m.group(2)
-    build = m.group(3)
-    rc = m.group(4)
+    patch = m.group(3)
 
-    # Check for x.y.z.0 or x.y.zrc0
-    if build == '0' or rc == '0':
-        print('rc or build cannot be specified as 0 (leave them out instead)', file=sys.stderr)
-        sys.exit(1)
-
-    # Implicitly, treat no rc as rc0 and no build as build 0
-    if build is None:
-        build = 0
-    if rc is None:
-        rc = 0
-
-    return VersionSpec(int(major), int(minor), int(build), int(rc))
+    return VersionSpec(int(major), int(minor), int(patch))
 
 def check_buildsystem(spec):
     '''
     Parse configure.ac and return
-    (major, minor, build, rc)
+    (major, minor, patch)
     '''
     info = {}
     filename = 'configure.ac'
-    pattern = r"define\(_CLIENT_VERSION_([A-Z_]+), ([0-9a-z]+)\)"
+    pattern = r"define\(_PKG_VERSION_([A-Z_]+), ([0-9a-z]+)\)"
 
     with open(filename) as f:
         for line in f:
@@ -84,8 +63,7 @@ def check_buildsystem(spec):
     cfg_spec = VersionSpec(
             int(info['MAJOR']),
             int(info['MINOR']),
-            int(info['BUILD']),
-            int(info['RC']),
+            int(info['PATCH']),
         )
 
     if cfg_spec != spec:
@@ -96,7 +74,7 @@ def main():
     try:
         tag = sys.argv[1]
     except IndexError:
-        print("Usage: make-tag.py <tag>, e.g. v29.0 or v29.1rc3", file=sys.stderr)
+        print("Usage: make-tag.py <tag>, e.g. v0.7.2", file=sys.stderr)
         sys.exit(1)
 
     spec = parse_tag(tag)
@@ -115,15 +93,7 @@ def main():
     check_buildsystem(spec)
 
     # Generate base message
-    if not spec.build:
-        version = f"{spec.major}.{spec.minor}"
-    else:
-        version = f"{spec.major}.{spec.minor}.{spec.build}"
-    if spec.rc:
-        version += f" release candidate {spec.rc}"
-    else:
-        version += " final"
-    msg = 'Bitcoin Core ' + version + '\n'
+    msg = 'libsecp256k1 ' + version_name(spec) + '\n'
 
     # Add treehash header
     msg += "\n"
