@@ -64,19 +64,12 @@ def parse_tag(tag):
 
 def check_buildsystem(spec):
     '''
-    Parse configure.ac or CMakeLists.txt and return
+    Parse configure.ac and return
     (major, minor, build, rc)
     '''
     info = {}
     filename = 'configure.ac'
-    if os.path.exists(filename):
-        pattern = r"define\(_CLIENT_VERSION_([A-Z_]+), ([0-9a-z]+)\)"
-    else:
-        filename = 'CMakeLists.txt'
-        if not os.path.exists(filename):
-            print("No buildsystem (configure.ac or CMakeLists.txt) found", file=sys.stderr)
-            sys.exit(1)
-        pattern = r'set\(CLIENT_VERSION_([A-Z_]+)\s+"?([0-9a-z]+)"?\)'
+    pattern = r"define\(_CLIENT_VERSION_([A-Z_]+), ([0-9a-z]+)\)"
 
     with open(filename) as f:
         for line in f:
