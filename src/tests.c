@@ -144,24 +144,6 @@ static int context_eq(const secp256k1_context *a, const secp256k1_context *b) {
             && a->error_callback.data == b->error_callback.data;
 }
 
-static void run_deprecated_context_flags_test(void) {
-    /* Check that a context created with any of the flags in the flags array is
-     * identical to the NONE context. */
-    unsigned int flags[] = { SECP256K1_CONTEXT_SIGN,
-                             SECP256K1_CONTEXT_VERIFY,
-                             SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY };
-    secp256k1_context *none_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-    int i;
-    for (i = 0; i < (int)(ARRAY_SIZE(flags)); i++) {
-        secp256k1_context *tmp_ctx;
-        CHECK(secp256k1_context_preallocated_size(SECP256K1_CONTEXT_NONE) == secp256k1_context_preallocated_size(flags[i]));
-        tmp_ctx = secp256k1_context_create(flags[i]);
-        CHECK(context_eq(none_ctx, tmp_ctx));
-        secp256k1_context_destroy(tmp_ctx);
-    }
-    secp256k1_context_destroy(none_ctx);
-}
-
 static void run_ec_illegal_argument_tests(void) {
     secp256k1_pubkey pubkey;
     secp256k1_pubkey zero_pubkey;
@@ -7950,7 +7932,6 @@ static const struct tf_test_entry tests_general[] = {
     CASE(selftest_tests),
     CASE(all_proper_context_tests),
     CASE(all_static_context_tests),
-    CASE(deprecated_context_flags_test),
     CASE(scratch_tests),
     CASE(invalid_scratch_space_tests),
     CASE(plug_sha256_compression_tests),
