@@ -18,6 +18,7 @@ MAX_OUTPUTS_PER_TEST_CASE = 2324  # K_max + 1
 MAX_RECIPIENT_ENTRIES_PER_TEST_CASE = 4
 MAX_LABELS_PER_TEST_CASE = 4
 MAX_PERMUTATIONS_PER_SENDING_TEST_CASE = 12
+MAX_RECEIVING_SUBTESTS = 2
 
 def sha256(s):
     return hashlib.sha256(s).digest()
@@ -164,11 +165,29 @@ def gen_preamble(test_vectors):
 #define MAX_RECIPIENT_ENTRIES_PER_TEST_CASE {MAX_RECIPIENT_ENTRIES_PER_TEST_CASE}
 #define MAX_LABELS_PER_TEST_CASE  {MAX_LABELS_PER_TEST_CASE}
 #define MAX_PERMUTATIONS_PER_SENDING_TEST_CASE {MAX_PERMUTATIONS_PER_SENDING_TEST_CASE}
+#define MAX_RECEIVING_SUBTESTS {MAX_RECEIVING_SUBTESTS}
 
 struct bip352_recipient_addressdata {{
     unsigned char scan_pubkey[33];
     unsigned char spend_pubkey[33];
     size_t count;
+}};
+
+struct bip352_receiving_subtest {{
+    /* Given recipient data */
+    unsigned char scan_seckey[32];
+    unsigned char spend_seckey[32];
+    size_t num_to_scan_outputs;
+    unsigned char to_scan_outputs[MAX_OUTPUTS_PER_TEST_CASE][32];
+    size_t num_labels;
+    unsigned int label_integers[MAX_LABELS_PER_TEST_CASE];
+
+    /* Expected recipient data */
+    size_t full_check; /* 1..detailed check against tweaks and signatures, 0..only check found outputs count */
+    size_t num_found_output_pubkeys;
+    unsigned char found_output_pubkeys[MAX_OUTPUTS_PER_TEST_CASE][32];
+    unsigned char found_seckey_tweaks[MAX_OUTPUTS_PER_TEST_CASE][32];
+    unsigned char found_signatures[MAX_OUTPUTS_PER_TEST_CASE][64];
 }};
 
 struct bip352_test_vector {{
@@ -191,20 +210,8 @@ struct bip352_test_vector {{
     size_t num_recipient_outputs;
     unsigned char recipient_outputs[MAX_PERMUTATIONS_PER_SENDING_TEST_CASE][MAX_OUTPUTS_PER_TEST_CASE][32];
 
-    /* Given recipient data */
-    unsigned char scan_seckey[32];
-    unsigned char spend_seckey[32];
-    size_t num_to_scan_outputs;
-    unsigned char to_scan_outputs[MAX_OUTPUTS_PER_TEST_CASE][32];
-    size_t num_labels;
-    unsigned int label_integers[MAX_LABELS_PER_TEST_CASE];
-
-    /* Expected recipient data */
-    size_t full_check; /* 1..detailed check against tweaks and signatures, 0..only check found outputs count */
-    size_t num_found_output_pubkeys;
-    unsigned char found_output_pubkeys[MAX_OUTPUTS_PER_TEST_CASE][32];
-    unsigned char found_seckey_tweaks[MAX_OUTPUTS_PER_TEST_CASE][32];
-    unsigned char found_signatures[MAX_OUTPUTS_PER_TEST_CASE][64];
+    size_t num_receiving_subtests;
+    struct bip352_receiving_subtest receiving_subtests[MAX_RECEIVING_SUBTESTS];
 }};
 """
     return out
@@ -219,6 +226,13 @@ def gen_test_vectors(test_vectors):
         input_plain_pubkeys = []
         input_xonly_pubkeys = []
         outpoints = []
+
+        # To keep this script simple and the generated test vectors file (vectors.h) small, we take
+        # use of the fact that currently all BIP352 test vectors only have a single sending subtest.
+        # If that ever changes in the future, the following assertion would fail and this script,
+        # its emited data structures and the test code consuming the generated header would need to
+        # be extended, in a similar way to how it's already done for the receiving subtests.
+        assert len(test_vector['sending']) == 1
 
         pubkey_index = 0
         input_pubkeys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
@@ -254,33 +268,42 @@ def gen_test_vectors(test_vectors):
         # emit recipient outputs
         out += gen_sending_outputs(test_vector['sending'][0]['expected']['outputs'], "recipient outputs", prepend_count=True)
 
-        # emit recipient scan/spend seckeys
-        recv_test_given = test_vector['receiving'][0]['given']
-        recv_test_expected = test_vector['receiving'][0]['expected']
-        out += "        /* recipient data (scan and spend seckeys) */\n"
-        out += f"        {gen_byte_array(recv_test_given['key_material']['scan_priv_key'])},\n"
-        out += f"        {gen_byte_array(recv_test_given['key_material']['spend_priv_key'])},\n"
+        assert len(test_vector['receiving']) <= MAX_RECEIVING_SUBTESTS
+        out += f"        {len(test_vector['receiving'])}, /* number of receiving subtests */\n"
+        out += "        {\n"
+        for recv_test in test_vector['receiving']:
+            out += "        {\n"
+            # emit recipient scan/spend seckeys
+            recv_test_given = recv_test['given']
+            recv_test_expected = recv_test['expected']
+            out += "        /* recipient data (scan and spend seckeys) */\n"
+            out += f"        {gen_byte_array(recv_test_given['key_material']['scan_priv_key'])},\n"
+            out += f"        {gen_byte_array(recv_test_given['key_material']['spend_priv_key'])},\n"
 
-        # emit recipient to-scan outputs, labels and expected-found outputs
-        out += gen_outputs(recv_test_given['outputs'], "outputs to scan", prepend_count=True)
-        out += gen_labels(recv_test_given['labels'])
-        full_check = 'outputs' in recv_test_expected
-        out += f"        {int(full_check)}, /* full check? */\n"
-        if full_check:
-            expected_pubkeys = [o['pub_key'] for o in recv_test_expected['outputs']]
-            expected_tweaks = [o['priv_key_tweak'] for o in recv_test_expected['outputs']]
-            expected_signatures = [o['signature'] for o in recv_test_expected['outputs']]
-            out += "        /* expected output data (pubkeys and seckey tweaks) */\n"
-        else:
-            expected_pubkeys = []
-            expected_tweaks = []
-            expected_signatures = []
-            out += "        /* expected number of outputs */\n"
-            out += f"        {recv_test_expected['n_outputs']},\n"
+            # emit recipient to-scan outputs, labels and expected-found outputs
+            out += gen_outputs(recv_test_given['outputs'], "outputs to scan", prepend_count=True)
+            out += gen_labels(recv_test_given['labels'])
+            full_check = 'outputs' in recv_test_expected
+            out += f"        {int(full_check)}, /* full check? */\n"
+            if full_check:
+                expected_pubkeys = [o['pub_key'] for o in recv_test_expected['outputs']]
+                expected_tweaks = [o['priv_key_tweak'] for o in recv_test_expected['outputs']]
+                expected_signatures = [o['signature'] for o in recv_test_expected['outputs']]
+                out += "        /* expected output data (pubkeys and seckey tweaks) */\n"
+            else:
+                expected_pubkeys = []
+                expected_tweaks = []
+                expected_signatures = []
+                out += "        /* expected number of outputs */\n"
+                out += f"        {recv_test_expected['n_outputs']},\n"
 
-        out += gen_outputs(expected_pubkeys, prepend_count=full_check)
-        out += gen_outputs(expected_tweaks)
-        out += gen_outputs(expected_signatures)
+            out += gen_outputs(expected_pubkeys, prepend_count=full_check)
+            out += gen_outputs(expected_tweaks)
+            out += gen_outputs(expected_signatures)
+            out += "        },\n"
+        for _ in range(len(test_vector['receiving']), MAX_RECEIVING_SUBTESTS):
+            out += "        { 0 },\n"
+        out += "        },\n"
         out += "    },\n\n"
     out += "};\n"
     return out
