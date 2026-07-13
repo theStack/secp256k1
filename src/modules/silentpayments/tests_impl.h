@@ -681,7 +681,7 @@ void run_silentpayments_test_vector_send(const struct bip352_test_vector *test) 
     CHECK(match);
 }
 
-void run_silentpayments_test_vector_receive(const struct bip352_test_vector *test) {
+void run_silentpayments_test_vector_receive(const struct bip352_test_vector *test, const struct bip352_receive_subtest *subtest) {
     static secp256k1_pubkey pubkeys_objs[MAX_INPUTS_PER_TEST_CASE];
     static secp256k1_xonly_pubkey xonly_pubkeys_objs[MAX_INPUTS_PER_TEST_CASE];
     static secp256k1_xonly_pubkey tx_output_objs[MAX_OUTPUTS_PER_TEST_CASE];
@@ -725,38 +725,38 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
      * zero, check that the expected number of recipient outputs for this test case is zero
      */
     if (!ret) {
-        CHECK(test->num_found_output_pubkeys == 0);
+        CHECK(subtest->num_found_output_pubkeys == 0);
         return;
     }
     /* prepare the outputs */
-    for (i = 0; i < test->num_to_scan_outputs; i++) {
-        CHECK(secp256k1_xonly_pubkey_parse(CTX, &tx_output_objs[i], test->to_scan_outputs[i]));
+    for (i = 0; i < subtest->num_to_scan_outputs; i++) {
+        CHECK(secp256k1_xonly_pubkey_parse(CTX, &tx_output_objs[i], subtest->to_scan_outputs[i]));
         tx_outputs[i] = &tx_output_objs[i];
         found_outputs[i] = &found_output_objs[i];
     }
 
     /* scan / spend pubkeys are not in the given data of the recipient part, so let's compute them */
-    CHECK(secp256k1_ec_pubkey_create(CTX, &recipient_scan_pubkey, test->scan_seckey));
-    CHECK(secp256k1_ec_pubkey_create(CTX, &recipient_spend_pubkey, test->spend_seckey));
+    CHECK(secp256k1_ec_pubkey_create(CTX, &recipient_scan_pubkey, subtest->scan_seckey));
+    CHECK(secp256k1_ec_pubkey_create(CTX, &recipient_spend_pubkey, subtest->spend_seckey));
 
     /* create labels cache */
     labels_cache.entries_used = 0;
-    for (i = 0; i < test->num_labels; i++) {
-        unsigned int m = test->label_integers[i];
+    for (i = 0; i < subtest->num_labels; i++) {
+        unsigned int m = subtest->label_integers[i];
         struct label_cache_entry *cache_entry = &labels_cache.entries[labels_cache.entries_used];
-        CHECK(secp256k1_silentpayments_recipient_label_create(CTX, &label, cache_entry->label_tweak, test->scan_seckey, m));
+        CHECK(secp256k1_silentpayments_recipient_label_create(CTX, &label, cache_entry->label_tweak, subtest->scan_seckey, m));
         CHECK(secp256k1_silentpayments_recipient_label_serialize(CTX, cache_entry->label, &label));
         labels_cache.entries_used++;
     }
     CHECK(secp256k1_silentpayments_recipient_scan_outputs(CTX,
         found_outputs, &n_found,
-        tx_outputs, test->num_to_scan_outputs,
-        test->scan_seckey,
+        tx_outputs, subtest->num_to_scan_outputs,
+        subtest->scan_seckey,
         &prevouts_summary,
         &recipient_spend_pubkey,
         label_lookup, &labels_cache)
     );
-    if (test->full_check) {
+    if (subtest->full_check) {
         /* compare expected and scanned outputs (including calculated seckey tweaks and signatures) */
 #ifdef ENABLE_MODULE_SCHNORRSIG
         static unsigned char found_signatures[MAX_OUTPUTS_PER_TEST_CASE][64];
@@ -778,7 +778,7 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
             unsigned char full_seckey[32];
             secp256k1_keypair keypair;
             unsigned char signature[64];
-            memcpy(&full_seckey, test->spend_seckey, 32);
+            memcpy(&full_seckey, subtest->spend_seckey, 32);
             CHECK(secp256k1_ec_seckey_tweak_add(CTX, full_seckey, found_outputs[i]->tweak));
             CHECK(secp256k1_keypair_create(CTX, &keypair, full_seckey));
             CHECK(secp256k1_schnorrsig_sign32(CTX, signature, MSG32, &keypair, AUX32));
@@ -789,11 +789,11 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
         for (i = 0; i < n_found; i++) {
             int match = 0;
             CHECK(secp256k1_xonly_pubkey_serialize(CTX, found_output, &found_outputs[i]->output));
-            for (j = 0; j < test->num_found_output_pubkeys; j++) {
-                if (secp256k1_memcmp_var(&found_output, test->found_output_pubkeys[j], 32) == 0) {
-                    CHECK(secp256k1_memcmp_var(found_outputs[i]->tweak, test->found_seckey_tweaks[j], 32) == 0);
+            for (j = 0; j < subtest->num_found_output_pubkeys; j++) {
+                if (secp256k1_memcmp_var(&found_output, subtest->found_output_pubkeys[j], 32) == 0) {
+                    CHECK(secp256k1_memcmp_var(found_outputs[i]->tweak, subtest->found_seckey_tweaks[j], 32) == 0);
 #ifdef ENABLE_MODULE_SCHNORRSIG
-                    CHECK(secp256k1_memcmp_var(found_signatures[i], test->found_signatures[j], 64) == 0);
+                    CHECK(secp256k1_memcmp_var(found_signatures[i], subtest->found_signatures[j], 64) == 0);
 #endif
                     match = 1;
                     break;
@@ -801,7 +801,7 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
             }
             CHECK(match);
 
-            if (test->num_labels == 0) {
+            if (subtest->num_labels == 0) {
                 /* if the test case doesn't involve labels, we must not have any labeled matches */
                 CHECK(!found_outputs[i]->found_with_label);
             } else if (found_outputs[i]->found_with_label) {
@@ -817,7 +817,7 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
             }
         }
     }
-    CHECK(n_found == test->num_found_output_pubkeys);
+    CHECK(n_found == subtest->num_found_output_pubkeys);
 }
 
 static void silentpayments_sha256_tag_test(void) {
@@ -844,12 +844,14 @@ static void silentpayments_sha256_tag_test(void) {
 
 
 void run_silentpayments_test_vectors(void) {
-    size_t i;
+    size_t i, j;
 
     for (i = 0; i < ARRAY_SIZE(bip352_test_vectors); i++) {
         const struct bip352_test_vector *test = &bip352_test_vectors[i];
         run_silentpayments_test_vector_send(test);
-        run_silentpayments_test_vector_receive(test);
+        for (j = 0; j < test->num_receive_subtests; j++) {
+            run_silentpayments_test_vector_receive(test, &test->receive_subtests[j]);
+        }
     }
 }
 
