@@ -27,7 +27,7 @@ static int secp256k1_selftest_sha256(secp256k1_sha256_compression_function fn_co
     if (secp256k1_memcmp_var(out, output32, 32) != 0) {
         return 0;
     }
-    if (fn_compression != secp256k1_sha256_transform && !secp256k1_sha256_compression_equiv(fn_compression)) {
+    if (fn_compression != secp256k1_sha256_transform && !secp256k1_sha256_smoke_test(fn_compression)) {
         return 0;
     }
     return 1;

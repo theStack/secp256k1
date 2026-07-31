@@ -517,13 +517,13 @@ static void sha256_transform_corrupt(uint32_t *s, const unsigned char *chunk, si
     s[0] ^= 1;
 }
 
-static void run_sha256_compression_equiv_tests(void) {
-    CHECK(secp256k1_sha256_compression_equiv(sha256_transform_noadvance) == 0);
-    CHECK(secp256k1_sha256_compression_equiv(sha256_transform_short) == 0);
-    CHECK(secp256k1_sha256_compression_equiv(sha256_transform_ivreset) == 0);
-    CHECK(secp256k1_sha256_compression_equiv(sha256_transform_batch4) == 0);
-    CHECK(secp256k1_sha256_compression_equiv(sha256_transform_corrupt) == 0);
-    CHECK(secp256k1_sha256_compression_equiv(good_sha256_compression) == 1);
+static void run_sha256_compression_smoke_test_tests(void) {
+    CHECK(secp256k1_sha256_smoke_test(sha256_transform_noadvance) == 0);
+    CHECK(secp256k1_sha256_smoke_test(sha256_transform_short) == 0);
+    CHECK(secp256k1_sha256_smoke_test(sha256_transform_ivreset) == 0);
+    CHECK(secp256k1_sha256_smoke_test(sha256_transform_batch4) == 0);
+    CHECK(secp256k1_sha256_smoke_test(sha256_transform_corrupt) == 0);
+    CHECK(secp256k1_sha256_smoke_test(good_sha256_compression) == 1);
 }
 
 static void run_sha256_multi_block_compression_tests(void) {
@@ -7996,7 +7996,7 @@ static const struct tf_test_entry tests_general[] = {
     CASE(scratch_tests),
     CASE(invalid_scratch_space_tests),
     CASE(plug_sha256_compression_tests),
-    CASE(sha256_compression_equiv_tests),
+    CASE(sha256_compression_smoke_test_tests),
     CASE(sha256_multi_block_compression_tests),
 };
 
