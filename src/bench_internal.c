@@ -84,7 +84,7 @@ static void bench_setup(void* arg) {
     };
 
     /* Customize context if needed */
-    data->ctx = secp256k1_context_static;
+    data->ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     secp256k1_scalar_set_b32(&data->scalar[0], init[0], NULL);
     secp256k1_scalar_set_b32(&data->scalar[1], init[1], NULL);
@@ -393,11 +393,17 @@ static void bench_rfc6979_hmac_sha256(void* arg, int iters) {
     }
 }
 
+static void good_sha256_compression(uint32_t *s, const unsigned char *msg, size_t rounds) {
+    secp256k1_sha256_transform(s, msg, rounds);
+}
+
 static void bench_context(void* arg, int iters) {
     int i;
+    bench_inv *data = (bench_inv*)arg;
     (void)arg;
     for (i = 0; i < iters; i++) {
-        secp256k1_context_destroy(secp256k1_context_create(SECP256K1_CONTEXT_NONE));
+        /*secp256k1_context_destroy(secp256k1_context_create(SECP256K1_CONTEXT_NONE));*/
+        secp256k1_context_set_sha256_compression(data->ctx, good_sha256_compression);
     }
 }
 
