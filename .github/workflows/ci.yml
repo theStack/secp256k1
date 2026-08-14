@@ -452,6 +452,44 @@ jobs:
       - *CI_SCRIPT_IN_DOCKER
       - *PRINT_LOGS
 
+  filc_debian:
+    name: "Fil-C (memory safety)"
+    runs-on: ubuntu-latest
+    needs: docker_cache
+
+    env:
+      # Fil-C's clang is installed at /opt/filc and exposed as filc-clang in the
+      # docker image. Fil-C only ships binaries for x86_64 / aarch64, so this job
+      # only ever runs on those native arches.
+      # We set ASM=no because Fil-C's safe-inline-asm pass rejects the memory-operand
+      # assembly in src/scalar_4x64_impl.h; the C fallback path is what we exercise here.
+      CC: 'filc-clang'
+      ASM: 'no'
+      WITH_VALGRIND: 'no'
+      ECDH: 'yes'
+      RECOVERY: 'yes'
+      EXTRAKEYS: 'yes'
+      SCHNORRSIG: 'yes'
+      MUSIG: 'yes'
+      ELLSWIFT: 'yes'
+      SILENTPAYMENTS: 'yes'
+      CTIMETESTS: 'no'
+      # Fil-C runs are ~5-10x slower than native due to per-load/store capability
+      # checks, so keep test iterations low.
+      SECP256K1_TEST_ITERS: 2
+      BENCH: 'no'
+      SYMBOL_CHECK: 'no'
+
+    steps:
+      - *CHECKOUT
+      - name: CI script (Fil-C)
+        uses: ./.github/actions/run-in-docker-action
+        with:
+          dockerfile: ./ci/linux-debian.Dockerfile
+          scope: ${{ runner.arch }}-${{ needs.docker_cache.outputs.cache_scope }}
+          command: ./ci/ci.sh
+      - *PRINT_LOGS
+
   x86_64-macos-native:
     name: "x86_64: macOS Sequoia, Valgrind"
     runs-on: macos-15-intel

@@ -82,3 +82,29 @@ ENV VIRTUAL_ENV=/root/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install lief
+
+# Install Fil-C (capability-based memory-safe C compiler) for native x86_64 and arm64
+# builds. Fil-C only ships binaries for linux/x86_64 and linux/aarch64, so we skip the
+# install on other architectures (i686, s390x, ppc64le, armhf) and let those jobs continue
+# without it.
+# See https://fil-c.org/ .
+ARG FIL_C_VERSION=0.683
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ] || [ "$(dpkg --print-architecture)" = "arm64" ]; then \
+        FIL_C_ARCH=$(dpkg --print-architecture | sed 's/amd64/x86_64/; s/arm64/aarch64/') && \
+        apt-get update && \
+        DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y wget patchelf xz-utils && \
+        cd /tmp && \
+        wget --progress=dot:giga --https-only -O filc.tar.xz \
+            "https://github.com/pizlonator/fil-c/releases/download/v${FIL_C_VERSION}/filc-${FIL_C_VERSION}-linux-${FIL_C_ARCH}.tar.xz" && \
+        tar xf filc.tar.xz && \
+        mv "filc-${FIL_C_VERSION}-linux-${FIL_C_ARCH}" /opt/filc && \
+        cd /opt/filc && ./setup.sh && \
+        ln -s /opt/filc/build/bin/clang /usr/local/bin/filc-clang && \
+        ln -s /opt/filc/build/bin/clang++ /usr/local/bin/filc-clang++ && \
+        cd /tmp && rm -f filc.tar.xz && \
+        apt-get autoremove -y --purge wget patchelf xz-utils > /dev/null && \
+        apt-get clean && rm -rf /var/lib/apt/lists/* && \
+        filc-clang --version | head -1 ; \
+    else \
+        echo "Fil-C: skipped on architecture $(dpkg --print-architecture)"; \
+    fi
