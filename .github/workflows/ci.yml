@@ -452,6 +452,50 @@ jobs:
       - *CI_SCRIPT_IN_DOCKER
       - *PRINT_LOGS
 
+  filc_debian:
+    name: "x86_64: Linux (Debian stable, Fil-C)"
+    runs-on: ubuntu-latest
+    needs: docker_cache
+
+    strategy:
+      matrix:
+        configuration:
+          - env_vars: {}
+
+    env:
+      # Fil-C (https://fil-c.org/) is a memory-safe dialect of C: pointers carry
+      # capabilities and every load and store is checked at run time. Unlike ASan,
+      # whose redzones sit between allocations, this also catches overflows that stay
+      # within one allocation, e.g. writing past the limb array of a secp256k1_fe.
+      # Its clang is provided by the CI image as filc-clang, see
+      # ci/linux-debian.Dockerfile.
+      CC: 'filc-clang'
+      # Fil-C supports only a restricted form of inline assembly, and hand-written
+      # assembly would bypass the very checks this job is about, so exercise the C
+      # code paths only.
+      ASM: 'no'
+      WITH_VALGRIND: 'no'
+      ECDH: 'yes'
+      RECOVERY: 'yes'
+      EXTRAKEYS: 'yes'
+      SCHNORRSIG: 'yes'
+      MUSIG: 'yes'
+      ELLSWIFT: 'yes'
+      SILENTPAYMENTS: 'yes'
+      CTIMETESTS: 'no'
+      # The per-load/store checks make Fil-C builds a few times slower than native
+      # ones, so lower the iteration count as the QEMU-based jobs do.
+      SECP256K1_TEST_ITERS: 16
+      # Benchmark numbers are meaningless under Fil-C's run-time checks, and
+      # symbol-check.py does not know about the runtime that Fil-C links against.
+      BENCH: 'no'
+      SYMBOL_CHECK: 'no'
+
+    steps:
+      - *CHECKOUT
+      - *CI_SCRIPT_IN_DOCKER
+      - *PRINT_LOGS
+
   x86_64-macos-native:
     name: "x86_64: macOS Sequoia, Valgrind"
     runs-on: macos-15-intel

@@ -82,3 +82,28 @@ ENV VIRTUAL_ENV=/root/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install lief
+
+# Install Fil-C, a memory-safe dialect of C, see https://fil-c.org/ .
+# Only x86_64 gets it, because that is the only architecture running the Fil-C job:
+# with assembly disabled an arm64 run would compile the very same C code and would
+# not add coverage, so there is no point in growing the arm64 image for it.
+# The checksum is the "digest" field of the release asset as reported by the GitHub
+# API, so it needs to be updated together with the version.
+ARG FIL_C_VERSION=0.683
+ARG FIL_C_SHA256=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+RUN if [ "$(dpkg --print-architecture)" != "amd64" ]; then echo "Fil-C: skipped on $(dpkg --print-architecture)"; exit 0; fi; \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+    wget patchelf && \
+    cd /tmp && \
+    wget --progress=dot:giga --https-only -O filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FIL_C_VERSION}/filc-${FIL_C_VERSION}-linux-x86_64.tar.xz" && \
+    echo "${FIL_C_SHA256}  filc.tar.xz" | sha256sum --check && \
+    tar xf filc.tar.xz && \
+    mv "filc-${FIL_C_VERSION}-linux-x86_64" /opt/filc && \
+    rm filc.tar.xz && \
+    # setup.sh adjusts the prebuilt binaries (using patchelf) for their install location.
+    cd /opt/filc && ./setup.sh && \
+    ln -s /opt/filc/build/bin/clang /usr/bin/filc-clang && \
+    filc-clang --version && \
+    apt-get autoremove -y wget patchelf && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
