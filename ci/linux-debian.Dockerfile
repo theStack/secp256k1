@@ -82,3 +82,32 @@ ENV VIRTUAL_ENV=/root/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip install lief
+
+# Install Fil-C, a memory-safe dialect of C, see https://fil-c.org/ .
+# Upstream ships binary releases for linux/x86_64 and linux/aarch64 only, which are
+# exactly the two architectures this image is built for (see the docker_cache job).
+# The checksums are the "digest" fields of the release assets as reported by the
+# GitHub API, so they need to be updated together with the version.
+ARG FIL_C_VERSION=0.683
+ARG FIL_C_SHA256_X86_64=0fbc2135ad30d5b0adf31289bcc6f0da0cc8db2323f4eac2978d5f83538d10c6
+ARG FIL_C_SHA256_AARCH64=405bcd4ea69bed4542581cd917581b2a34ae8e363cc5c76b701f27585de60e66
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+    wget patchelf && \
+    case "$(dpkg --print-architecture)" in \
+        amd64) FIL_C_ARCH=x86_64;  FIL_C_SHA256="$FIL_C_SHA256_X86_64" ;; \
+        arm64) FIL_C_ARCH=aarch64; FIL_C_SHA256="$FIL_C_SHA256_AARCH64" ;; \
+        *) echo "Fil-C: no upstream binaries for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac && \
+    cd /tmp && \
+    wget --progress=dot:giga --https-only -O filc.tar.xz \
+        "https://github.com/pizlonator/fil-c/releases/download/v${FIL_C_VERSION}/filc-${FIL_C_VERSION}-linux-${FIL_C_ARCH}.tar.xz" && \
+    echo "${FIL_C_SHA256}  filc.tar.xz" | sha256sum --check && \
+    tar xf filc.tar.xz && \
+    mv "filc-${FIL_C_VERSION}-linux-${FIL_C_ARCH}" /opt/filc && \
+    rm filc.tar.xz && \
+    # setup.sh adjusts the prebuilt binaries (using patchelf) for their install location.
+    cd /opt/filc && ./setup.sh && \
+    ln -s /opt/filc/build/bin/clang /usr/bin/filc-clang && \
+    filc-clang --version && \
+    apt-get autoremove -y wget patchelf && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
