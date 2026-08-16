@@ -369,6 +369,20 @@ static void secp256k1_gej_set_ge(secp256k1_gej *r, const secp256k1_ge *a) {
 
    r->infinity = a->infinity;
    r->x = a->x;
+#if defined(SECP256K1_WIDEMUL_INT128) && !defined(VERIFY)
+   /* PoC, DO NOT MERGE: deliberate out-of-bounds write, one past the end of
+    * x.n[5]. It lands on r->y.n[0], which the next statement overwrites, so
+    * the computed results are unchanged and only a memory checker can notice.
+    * The volatile store keeps it from being optimised away.
+    *
+    * Restricted to the 5x52 field representation, where secp256k1_fe is exactly
+    * uint64_t n[5] and this is one past the end. Under SECP256K1_WIDEMUL_INT64
+    * the representation is uint32_t n[10], where n[5] is in bounds and the store
+    * would corrupt x instead; under VERIFY, SECP256K1_FE_VERIFY_FIELDS adds
+    * members after n[5]. In both cases the write is no longer the intra-object
+    * overflow this is meant to test. */
+   *(volatile uint64_t *)&r->x.n[5] = 0;
+#endif
    r->y = a->y;
    secp256k1_fe_set_int(&r->z, 1);
 
