@@ -108,11 +108,11 @@ typedef struct secp256k1_silentpayments_recipient {
  *       outpoint_smallest36: serialized (36-byte) smallest outpoint
  *                            (lexicographically) from the transaction inputs
  *                  keypairs: pointer to an array of pointers to taproot
- *                            keypair inputs (can be NULL if no secret keys
+ *                            keypair inputs (must be NULL if no secret keys
  *                            of taproot inputs are used)
  *                n_keypairs: the size of the keypairs array.
  *                   seckeys: pointer to an array of pointers to 32-byte
- *                            secret keys of non-taproot inputs (can be NULL
+ *                            secret keys of non-taproot inputs (must be NULL
  *                            if no secret keys of non-taproot inputs are
  *                            used)
  *                 n_seckeys: the size of the seckeys array.
@@ -269,11 +269,11 @@ typedef struct secp256k1_silentpayments_prevouts_summary {
  *  In:   outpoint_smallest36: serialized smallest outpoint (lexicographically)
  *                             from the transaction inputs
  *              xonly_pubkeys: pointer to an array of pointers to taproot
- *                             x-only public keys (can be NULL if no taproot
+ *                             x-only public keys (must be NULL if no taproot
  *                             inputs are used)
  *            n_xonly_pubkeys: the size of the xonly_pubkeys array.
  *                    pubkeys: pointer to an array of pointers to non-taproot
- *                             public keys (can be NULL if no non-taproot
+ *                             public keys (must be NULL if no non-taproot
  *                             inputs are used)
  *                  n_pubkeys: the size of the pubkeys array.
  */
