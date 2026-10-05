@@ -73,6 +73,7 @@ static void print_buf_plain(const unsigned char *buf, size_t len) {
  * any statements in a block.
  */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+this should cause a ci job to fail
 #  define STATIC_ASSERT(expr) _Static_assert(expr, #expr)
 #elif !defined(__cplusplus) && (defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6))))
 /* GCC >= 4.6 and Clang support _Static_assert as an extension in pre-C11 modes,
