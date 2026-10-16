@@ -31,6 +31,7 @@ static SECP256K1_INLINE int secp256k1_u128_accum_mul_carry(secp256k1_uint128 *r,
 #if __has_builtin(__builtin_add_overflow)
    return __builtin_add_overflow(*r, (uint128_t)a * b, r);
 #else
+   meh
    uint128_t t = (uint128_t)a * b;
    uint64_t tl = (uint64_t)t, th = (uint64_t)(t >> 64);
    uint64_t lo = (uint64_t)*r + tl;
