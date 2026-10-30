@@ -74,6 +74,16 @@ typedef struct secp256k1_silentpayments_recipient {
  *  outputs from the final transaction may make all or some of the outputs
  *  unfindable by the recipient.
  *
+ *  Recipients with equal scan public keys are treated as belonging to the
+ *  same owner (e.g., labeled addresses of one wallet). Addresses of different
+ *  owners share a scan public key only with negligible probability. However,
+ *  an adversary can create an address reusing another owner's scan public
+ *  key; this may make that owner's output unfindable. Callers batching
+ *  payments should thus only pass recipients with equal scan public keys in
+ *  the same call if they were obtained from the same source (e.g., withdrawal
+ *  requests of the same user); otherwise, they should pay these recipients in
+ *  separate transactions.
+ *
  *  Returns: 1 if creation of outputs was successful.
  *           0 on failure, i.e., when one of the following occurs:
  *             - The size of any group (i.e. recipients sharing the same scan public key)
@@ -103,7 +113,8 @@ typedef struct secp256k1_silentpayments_recipient {
  *                            may no longer correspond to the positions in the
  *                            array. Multiple recipient objects with the same scan
  *                            public key and/or same spend public key can be passed
- *                            if they carry different indices.
+ *                            if they carry different indices (see the note on
+ *                            equal scan public keys above).
  *              n_recipients: the size of the recipients array.
  *       outpoint_smallest36: serialized (36-byte) smallest outpoint
  *                            (lexicographically) from the transaction inputs
