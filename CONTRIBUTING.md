@@ -18,6 +18,7 @@ Contributors are recommended to provide the following in addition to the new cod
     If the specification contains pseudocode, a reference implementation or test vectors, these can be used to compare with the proposed libsecp256k1 code.
 * **Security Arguments:**
     In addition to a defining the security goals, it should be argued that the new functionality meets these goals.
+    The general security goals of the library are described in the [threat model](doc/threat_model.md).
     Depending on the nature of the new functionality, a wide range of security arguments are acceptable, ranging from being "obviously secure" to rigorous proofs of security.
 * **Relevance Arguments:**
     The relevance of the new functionality for the Bitcoin ecosystem should be argued by outlining clear use cases.

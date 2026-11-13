@@ -4,6 +4,8 @@
 
 To report security issues send an email to secp256k1-security@bitcoincore.org (not for support).
 
+See the [threat model](doc/threat_model.md) for the security goals of the library and for which issues should be reported privately and which should be reported publicly.
+
 The following keys may be used to communicate sensitive information to developers:
 
 | Name                 | Fingerprint                                        |
