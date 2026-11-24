@@ -646,6 +646,45 @@ jobs:
             g++ -Werror include/*.h
             clang -Werror -x c++-header include/*.h
 
+  filc:
+    name: "x86_64: Linux (Fil-C)"
+    runs-on: ubuntu-latest
+
+    env:
+      FILC_VERSION: '0.687'
+      FILC_SHA256: 'aab538401f78a47ab261ee79afed8c6b99e1d4848e263ae159a75b03c1288da1'
+      # Fil-C binaries cannot run under Valgrind.
+      WITH_VALGRIND: 'no'
+      CTIMETESTS: 'no'
+      # Fil-C uses its own ABI and symbol mangling.
+      SYMBOL_CHECK: 'no'
+      SECP256K1_TEST_ITERS: 32
+
+    strategy:
+      fail-fast: false
+      matrix:
+        env_vars:
+          - { WIDEMUL: 'int128' }
+          - { WIDEMUL: 'int64', ECMULTGENKB: 2, ECMULTWINDOW: 2 }
+
+    steps:
+      - *CHECKOUT
+
+      - name: Install Fil-C
+        working-directory: ${{ runner.temp }}
+        run: |
+          sudo apt-get update && sudo apt-get install --no-install-recommends -y patchelf
+          FILC="filc-${FILC_VERSION}-linux-x86_64"
+          curl --fail --silent --show-error --location --remote-name \
+            "https://github.com/pizlonator/fil-c/releases/download/v${FILC_VERSION}/${FILC}.tar.xz"
+          echo "${FILC_SHA256}  ${FILC}.tar.xz" | sha256sum --check
+          tar -xf "${FILC}.tar.xz"
+          (cd "${FILC}" && ./setup.sh)
+          echo "CC=${PWD}/${FILC}/build/bin/clang" >> "$GITHUB_ENV"
+
+      - *CI_SCRIPT_ON_HOST
+      - *PRINT_LOGS
+
   sage:
     name: "SageMath prover"
     runs-on: ubuntu-latest
